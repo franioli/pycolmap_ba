@@ -288,6 +288,7 @@ def build_options(solver: SolverOptions) -> pycolmap.BundleAdjustmentOptions:
     solver_options.function_tolerance = solver.function_tolerance
     solver_options.gradient_tolerance = solver.gradient_tolerance
     solver_options.parameter_tolerance = solver.parameter_tolerance
+
     return options
 
 

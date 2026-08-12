@@ -1,0 +1,287 @@
+Log file created at: 2026/08/12 16:25:25
+Running on machine: tuxedo
+Running duration (h:mm:ss): 0:00:03
+Log line format: [IWEF]yyyymmdd hh:mm:ss.uuuuuu threadid file:line] msg
+E20260812 16:25:25.931155 558585 extract_features.cc:31] Check failed: colmap::ExistsDir(path_val) Directory "/home/francesco/dev/pycolmap_ba/data/nadir-2/images" does not exist.
+W20260812 16:26:04.760476 558585 feature_extraction.cc:445] Your current options use the maximum number of threads on the machine to extract features. Extracting SIFT features on the CPU can consume a lot of RAM per thread for large images. Consider reducing the maximum image size and/or the first octave or manually limit the number of extraction threads. Ignore this warning, if your machine has sufficient memory for the current settings.
+I20260812 16:26:04.760651 559356 feature_extraction.cc:494] === Feature extraction ===
+I20260812 16:26:04.761178 559373 sift.cc:765] Creating SIFT CPU feature extractor
+I20260812 16:26:04.761221 559374 sift.cc:765] Creating SIFT CPU feature extractor
+I20260812 16:26:04.761243 559376 sift.cc:765] Creating SIFT CPU feature extractor
+I20260812 16:26:04.761225 559375 sift.cc:765] Creating SIFT CPU feature extractor
+I20260812 16:26:04.761267 559377 sift.cc:765] Creating SIFT CPU feature extractor
+I20260812 16:26:04.761300 559378 sift.cc:765] Creating SIFT CPU feature extractor
+I20260812 16:26:04.761327 559379 sift.cc:765] Creating SIFT CPU feature extractor
+I20260812 16:26:04.761350 559380 sift.cc:765] Creating SIFT CPU feature extractor
+I20260812 16:26:04.761415 559381 sift.cc:765] Creating SIFT CPU feature extractor
+I20260812 16:26:04.761477 559382 sift.cc:765] Creating SIFT CPU feature extractor
+I20260812 16:26:04.761492 559383 sift.cc:765] Creating SIFT CPU feature extractor
+I20260812 16:26:04.761555 559384 sift.cc:765] Creating SIFT CPU feature extractor
+I20260812 16:26:04.761596 559385 sift.cc:765] Creating SIFT CPU feature extractor
+I20260812 16:26:04.761615 559386 sift.cc:765] Creating SIFT CPU feature extractor
+I20260812 16:26:04.761682 559388 sift.cc:765] Creating SIFT CPU feature extractor
+I20260812 16:26:04.761715 559387 sift.cc:765] Creating SIFT CPU feature extractor
+I20260812 16:26:04.762036 559389 feature_extraction.cc:270] Processed file [1/39]
+I20260812 16:26:04.762058 559389 feature_extraction.cc:273]   Name:            01_nadir-2.jpg
+W20260812 16:26:04.762066 559389 feature_extraction.cc:277] 01_nadir-2.jpg IMAGE_EXISTS: Features for image were already extracted.
+I20260812 16:26:04.762094 559389 feature_extraction.cc:270] Processed file [2/39]
+I20260812 16:26:04.762105 559389 feature_extraction.cc:273]   Name:            02_nadir-2.jpg
+W20260812 16:26:04.762112 559389 feature_extraction.cc:277] 02_nadir-2.jpg IMAGE_EXISTS: Features for image were already extracted.
+I20260812 16:26:04.762125 559389 feature_extraction.cc:270] Processed file [3/39]
+I20260812 16:26:04.762131 559389 feature_extraction.cc:273]   Name:            03_nadir-2.jpg
+W20260812 16:26:04.762138 559389 feature_extraction.cc:277] 03_nadir-2.jpg IMAGE_EXISTS: Features for image were already extracted.
+I20260812 16:26:04.762149 559389 feature_extraction.cc:270] Processed file [4/39]
+I20260812 16:26:04.762157 559389 feature_extraction.cc:273]   Name:            06_nadir-2.jpg
+W20260812 16:26:04.762164 559389 feature_extraction.cc:277] 06_nadir-2.jpg IMAGE_EXISTS: Features for image were already extracted.
+I20260812 16:26:04.762174 559389 feature_extraction.cc:270] Processed file [5/39]
+I20260812 16:26:04.762181 559389 feature_extraction.cc:273]   Name:            05_nadir-2.jpg
+W20260812 16:26:04.762188 559389 feature_extraction.cc:277] 05_nadir-2.jpg IMAGE_EXISTS: Features for image were already extracted.
+I20260812 16:26:04.762200 559389 feature_extraction.cc:270] Processed file [6/39]
+I20260812 16:26:04.762207 559389 feature_extraction.cc:273]   Name:            04_nadir-2.jpg
+W20260812 16:26:04.762214 559389 feature_extraction.cc:277] 04_nadir-2.jpg IMAGE_EXISTS: Features for image were already extracted.
+I20260812 16:26:04.762225 559389 feature_extraction.cc:270] Processed file [7/39]
+I20260812 16:26:04.762231 559389 feature_extraction.cc:273]   Name:            08_nadir-2.jpg
+W20260812 16:26:04.762238 559389 feature_extraction.cc:277] 08_nadir-2.jpg IMAGE_EXISTS: Features for image were already extracted.
+I20260812 16:26:04.762249 559389 feature_extraction.cc:270] Processed file [8/39]
+I20260812 16:26:04.762256 559389 feature_extraction.cc:273]   Name:            07_nadir-2.jpg
+W20260812 16:26:04.762264 559389 feature_extraction.cc:277] 07_nadir-2.jpg IMAGE_EXISTS: Features for image were already extracted.
+I20260812 16:26:04.762274 559389 feature_extraction.cc:270] Processed file [9/39]
+I20260812 16:26:04.762281 559389 feature_extraction.cc:273]   Name:            10_nadir-2.jpg
+W20260812 16:26:04.762288 559389 feature_extraction.cc:277] 10_nadir-2.jpg IMAGE_EXISTS: Features for image were already extracted.
+I20260812 16:26:04.762324 559389 feature_extraction.cc:270] Processed file [10/39]
+I20260812 16:26:04.762331 559389 feature_extraction.cc:273]   Name:            09_nadir-2.jpg
+W20260812 16:26:04.762337 559389 feature_extraction.cc:277] 09_nadir-2.jpg IMAGE_EXISTS: Features for image were already extracted.
+I20260812 16:26:04.762351 559389 feature_extraction.cc:270] Processed file [11/39]
+I20260812 16:26:04.762356 559389 feature_extraction.cc:273]   Name:            11_nadir-2.jpg
+W20260812 16:26:04.762363 559389 feature_extraction.cc:277] 11_nadir-2.jpg IMAGE_EXISTS: Features for image were already extracted.
+I20260812 16:26:04.762374 559389 feature_extraction.cc:270] Processed file [12/39]
+I20260812 16:26:04.762382 559389 feature_extraction.cc:273]   Name:            14_nadir-2.jpg
+W20260812 16:26:04.762388 559389 feature_extraction.cc:277] 14_nadir-2.jpg IMAGE_EXISTS: Features for image were already extracted.
+I20260812 16:26:04.762400 559389 feature_extraction.cc:270] Processed file [13/39]
+I20260812 16:26:04.762408 559389 feature_extraction.cc:273]   Name:            13_nadir-2.jpg
+W20260812 16:26:04.762414 559389 feature_extraction.cc:277] 13_nadir-2.jpg IMAGE_EXISTS: Features for image were already extracted.
+I20260812 16:26:04.762441 559389 feature_extraction.cc:270] Processed file [14/39]
+I20260812 16:26:04.762449 559389 feature_extraction.cc:273]   Name:            12_nadir-2.jpg
+W20260812 16:26:04.762455 559389 feature_extraction.cc:277] 12_nadir-2.jpg IMAGE_EXISTS: Features for image were already extracted.
+I20260812 16:26:04.762465 559389 feature_extraction.cc:270] Processed file [15/39]
+I20260812 16:26:04.762473 559389 feature_extraction.cc:273]   Name:            15_nadir-2.jpg
+W20260812 16:26:04.762480 559389 feature_extraction.cc:277] 15_nadir-2.jpg IMAGE_EXISTS: Features for image were already extracted.
+I20260812 16:26:04.762491 559389 feature_extraction.cc:270] Processed file [16/39]
+I20260812 16:26:04.762498 559389 feature_extraction.cc:273]   Name:            16_nadir-2.jpg
+W20260812 16:26:04.762506 559389 feature_extraction.cc:277] 16_nadir-2.jpg IMAGE_EXISTS: Features for image were already extracted.
+I20260812 16:26:04.762529 559389 feature_extraction.cc:270] Processed file [17/39]
+I20260812 16:26:04.762537 559389 feature_extraction.cc:273]   Name:            17_nadir-2.jpg
+W20260812 16:26:04.762544 559389 feature_extraction.cc:277] 17_nadir-2.jpg IMAGE_EXISTS: Features for image were already extracted.
+I20260812 16:26:04.762557 559389 feature_extraction.cc:270] Processed file [18/39]
+I20260812 16:26:04.762563 559389 feature_extraction.cc:273]   Name:            21_nadir-2.jpg
+W20260812 16:26:04.762569 559389 feature_extraction.cc:277] 21_nadir-2.jpg IMAGE_EXISTS: Features for image were already extracted.
+I20260812 16:26:04.762581 559389 feature_extraction.cc:270] Processed file [19/39]
+I20260812 16:26:04.762588 559389 feature_extraction.cc:273]   Name:            23_nadir-2.jpg
+W20260812 16:26:04.762594 559389 feature_extraction.cc:277] 23_nadir-2.jpg IMAGE_EXISTS: Features for image were already extracted.
+I20260812 16:26:04.762605 559389 feature_extraction.cc:270] Processed file [20/39]
+I20260812 16:26:04.762612 559389 feature_extraction.cc:273]   Name:            24_nadir-2.jpg
+W20260812 16:26:04.762619 559389 feature_extraction.cc:277] 24_nadir-2.jpg IMAGE_EXISTS: Features for image were already extracted.
+I20260812 16:26:04.762631 559389 feature_extraction.cc:270] Processed file [21/39]
+I20260812 16:26:04.762638 559389 feature_extraction.cc:273]   Name:            22_nadir-2.jpg
+W20260812 16:26:04.762645 559389 feature_extraction.cc:277] 22_nadir-2.jpg IMAGE_EXISTS: Features for image were already extracted.
+I20260812 16:26:04.762656 559389 feature_extraction.cc:270] Processed file [22/39]
+I20260812 16:26:04.762663 559389 feature_extraction.cc:273]   Name:            18_nadir-2.jpg
+W20260812 16:26:04.762671 559389 feature_extraction.cc:277] 18_nadir-2.jpg IMAGE_EXISTS: Features for image were already extracted.
+I20260812 16:26:04.762689 559389 feature_extraction.cc:270] Processed file [23/39]
+I20260812 16:26:04.762707 559389 feature_extraction.cc:273]   Name:            19_nadir-2.jpg
+W20260812 16:26:04.762714 559389 feature_extraction.cc:277] 19_nadir-2.jpg IMAGE_EXISTS: Features for image were already extracted.
+I20260812 16:26:04.762733 559389 feature_extraction.cc:270] Processed file [24/39]
+I20260812 16:26:04.762740 559389 feature_extraction.cc:273]   Name:            20_nadir-2.jpg
+W20260812 16:26:04.762748 559389 feature_extraction.cc:277] 20_nadir-2.jpg IMAGE_EXISTS: Features for image were already extracted.
+I20260812 16:26:04.762766 559389 feature_extraction.cc:270] Processed file [25/39]
+I20260812 16:26:04.762773 559389 feature_extraction.cc:273]   Name:            25_nadir-2.jpg
+W20260812 16:26:04.762780 559389 feature_extraction.cc:277] 25_nadir-2.jpg IMAGE_EXISTS: Features for image were already extracted.
+I20260812 16:26:04.762794 559389 feature_extraction.cc:270] Processed file [26/39]
+I20260812 16:26:04.762802 559389 feature_extraction.cc:273]   Name:            26_nadir-2.jpg
+W20260812 16:26:04.762809 559389 feature_extraction.cc:277] 26_nadir-2.jpg IMAGE_EXISTS: Features for image were already extracted.
+I20260812 16:26:04.762820 559389 feature_extraction.cc:270] Processed file [27/39]
+I20260812 16:26:04.762830 559389 feature_extraction.cc:273]   Name:            27_nadir-2.jpg
+W20260812 16:26:04.762837 559389 feature_extraction.cc:277] 27_nadir-2.jpg IMAGE_EXISTS: Features for image were already extracted.
+I20260812 16:26:04.762849 559389 feature_extraction.cc:270] Processed file [28/39]
+I20260812 16:26:04.762857 559389 feature_extraction.cc:273]   Name:            28_nadir-2.jpg
+W20260812 16:26:04.762866 559389 feature_extraction.cc:277] 28_nadir-2.jpg IMAGE_EXISTS: Features for image were already extracted.
+I20260812 16:26:04.762885 559389 feature_extraction.cc:270] Processed file [29/39]
+I20260812 16:26:04.762892 559389 feature_extraction.cc:273]   Name:            29_nadir-2.jpg
+W20260812 16:26:04.762900 559389 feature_extraction.cc:277] 29_nadir-2.jpg IMAGE_EXISTS: Features for image were already extracted.
+I20260812 16:26:04.762915 559389 feature_extraction.cc:270] Processed file [30/39]
+I20260812 16:26:04.762923 559389 feature_extraction.cc:273]   Name:            30_nadir-2.jpg
+W20260812 16:26:04.762930 559389 feature_extraction.cc:277] 30_nadir-2.jpg IMAGE_EXISTS: Features for image were already extracted.
+I20260812 16:26:04.762943 559389 feature_extraction.cc:270] Processed file [31/39]
+I20260812 16:26:04.762949 559389 feature_extraction.cc:273]   Name:            31_nadir-2.jpg
+W20260812 16:26:04.762957 559389 feature_extraction.cc:277] 31_nadir-2.jpg IMAGE_EXISTS: Features for image were already extracted.
+I20260812 16:26:04.762969 559389 feature_extraction.cc:270] Processed file [32/39]
+I20260812 16:26:04.762979 559389 feature_extraction.cc:273]   Name:            32_nadir-2.jpg
+W20260812 16:26:04.762986 559389 feature_extraction.cc:277] 32_nadir-2.jpg IMAGE_EXISTS: Features for image were already extracted.
+I20260812 16:26:04.762997 559389 feature_extraction.cc:270] Processed file [33/39]
+I20260812 16:26:04.763005 559389 feature_extraction.cc:273]   Name:            33_nadir-2.jpg
+W20260812 16:26:04.763012 559389 feature_extraction.cc:277] 33_nadir-2.jpg IMAGE_EXISTS: Features for image were already extracted.
+I20260812 16:26:04.763022 559389 feature_extraction.cc:270] Processed file [34/39]
+I20260812 16:26:04.763028 559389 feature_extraction.cc:273]   Name:            34_nadir-2.jpg
+W20260812 16:26:04.763036 559389 feature_extraction.cc:277] 34_nadir-2.jpg IMAGE_EXISTS: Features for image were already extracted.
+I20260812 16:26:04.763048 559389 feature_extraction.cc:270] Processed file [35/39]
+I20260812 16:26:04.763055 559389 feature_extraction.cc:273]   Name:            35_nadir-2.jpg
+W20260812 16:26:04.763063 559389 feature_extraction.cc:277] 35_nadir-2.jpg IMAGE_EXISTS: Features for image were already extracted.
+I20260812 16:26:04.763073 559389 feature_extraction.cc:270] Processed file [36/39]
+I20260812 16:26:04.763082 559389 feature_extraction.cc:273]   Name:            36_nadir-2.jpg
+W20260812 16:26:04.763096 559389 feature_extraction.cc:277] 36_nadir-2.jpg IMAGE_EXISTS: Features for image were already extracted.
+I20260812 16:26:04.763105 559389 feature_extraction.cc:270] Processed file [37/39]
+I20260812 16:26:04.763110 559389 feature_extraction.cc:273]   Name:            37_nadir-2.jpg
+W20260812 16:26:04.763115 559389 feature_extraction.cc:277] 37_nadir-2.jpg IMAGE_EXISTS: Features for image were already extracted.
+I20260812 16:26:04.763123 559389 feature_extraction.cc:270] Processed file [38/39]
+I20260812 16:26:04.763127 559389 feature_extraction.cc:273]   Name:            38_nadir-2.jpg
+W20260812 16:26:04.763132 559389 feature_extraction.cc:277] 38_nadir-2.jpg IMAGE_EXISTS: Features for image were already extracted.
+I20260812 16:26:04.763139 559389 feature_extraction.cc:270] Processed file [39/39]
+I20260812 16:26:04.763144 559389 feature_extraction.cc:273]   Name:            39_nadir-2.jpg
+W20260812 16:26:04.763149 559389 feature_extraction.cc:277] 39_nadir-2.jpg IMAGE_EXISTS: Features for image were already extracted.
+I20260812 16:26:04.763288 559356 timer.cc:90] Elapsed time: 0.000 [minutes]
+I20260812 16:26:04.764714 559390 feature_matching.cc:196] === Feature matching & geometric verification ===
+I20260812 16:26:04.764858 559395 sift.cc:1686] Creating SIFT CPU feature matcher
+I20260812 16:26:04.764873 559393 sift.cc:1686] Creating SIFT CPU feature matcher
+I20260812 16:26:04.764884 559396 sift.cc:1686] Creating SIFT CPU feature matcher
+I20260812 16:26:04.764868 559391 sift.cc:1686] Creating SIFT CPU feature matcher
+I20260812 16:26:04.764863 559392 sift.cc:1686] Creating SIFT CPU feature matcher
+I20260812 16:26:04.764902 559397 sift.cc:1686] Creating SIFT CPU feature matcher
+I20260812 16:26:04.764876 559394 sift.cc:1686] Creating SIFT CPU feature matcher
+I20260812 16:26:04.764935 559398 sift.cc:1686] Creating SIFT CPU feature matcher
+I20260812 16:26:04.764958 559399 sift.cc:1686] Creating SIFT CPU feature matcher
+I20260812 16:26:04.764972 559400 sift.cc:1686] Creating SIFT CPU feature matcher
+I20260812 16:26:04.764997 559401 sift.cc:1686] Creating SIFT CPU feature matcher
+I20260812 16:26:04.765012 559402 sift.cc:1686] Creating SIFT CPU feature matcher
+I20260812 16:26:04.765028 559403 sift.cc:1686] Creating SIFT CPU feature matcher
+I20260812 16:26:04.765051 559404 sift.cc:1686] Creating SIFT CPU feature matcher
+I20260812 16:26:04.765074 559405 sift.cc:1686] Creating SIFT CPU feature matcher
+I20260812 16:26:04.765096 559406 sift.cc:1686] Creating SIFT CPU feature matcher
+I20260812 16:26:04.765499 559390 pairing.cc:179] Generating exhaustive image pairs...
+I20260812 16:26:04.765514 559390 pairing.cc:212] Processing block [1/1, 1/1]
+I20260812 16:26:04.770892 559390 feature_matching.cc:218] in 0.005s
+I20260812 16:26:04.770941 559390 timer.cc:90] Elapsed time: 0.000 [minutes]
+I20260812 16:26:11.309048 558585 incremental_pipeline.cc:348] Loading database
+I20260812 16:26:11.309118 558585 database_cache.cc:73] Loading rigs...
+I20260812 16:26:11.309145 558585 database_cache.cc:83]  1 in 0.000s
+I20260812 16:26:11.309156 558585 database_cache.cc:91] Loading cameras...
+I20260812 16:26:11.309171 558585 database_cache.cc:109]  1 in 0.000s
+I20260812 16:26:11.309180 558585 database_cache.cc:117] Loading frames...
+I20260812 16:26:11.309243 558585 database_cache.cc:127]  39 in 0.000s
+I20260812 16:26:11.309253 558585 database_cache.cc:135] Loading matches...
+I20260812 16:26:11.314810 558585 database_cache.cc:140]  441 in 0.006s
+I20260812 16:26:11.314852 558585 database_cache.cc:148] Loading images...
+I20260812 16:26:11.329154 558585 database_cache.cc:245]  39 in 0.014s (connected 39, loaded 39)
+I20260812 16:26:11.329202 558585 database_cache.cc:259] Loading pose priors...
+I20260812 16:26:11.329236 558585 database_cache.cc:267]  39 in 0.000s
+I20260812 16:26:11.329242 558585 database_cache.cc:275] Building correspondence graph...
+I20260812 16:26:11.387660 558585 database_cache.cc:304]  in 0.058s (ignored 0)
+I20260812 16:26:11.387712 558585 timer.cc:90] Elapsed time: 0.001 [minutes]
+I20260812 16:26:11.391352 558585 incremental_pipeline.cc:460] Finding good initial image pair
+I20260812 16:26:11.488020 558585 incremental_pipeline.cc:484] Registering initial image pair #24 and #8
+I20260812 16:26:11.499261 558585 incremental_pipeline.cc:502] Global bundle adjustment
+I20260812 16:26:11.773343 558585 incremental_pipeline.cc:607] Registering image #12 (num_reg_frames=2)
+I20260812 16:26:11.773375 558585 incremental_pipeline.cc:610] => Image sees 1751 / 7873 points
+I20260812 16:26:11.968027 558585 incremental_pipeline.cc:87] Retriangulation and Global bundle adjustment
+I20260812 16:26:12.153959 558585 incremental_pipeline.cc:607] Registering image #14 (num_reg_frames=3)
+I20260812 16:26:12.153997 558585 incremental_pipeline.cc:610] => Image sees 3449 / 7435 points
+I20260812 16:26:12.447870 558585 incremental_pipeline.cc:87] Retriangulation and Global bundle adjustment
+I20260812 16:26:12.692970 558585 incremental_pipeline.cc:607] Registering image #11 (num_reg_frames=4)
+I20260812 16:26:12.693009 558585 incremental_pipeline.cc:610] => Image sees 3343 / 7832 points
+I20260812 16:26:12.896588 558585 incremental_pipeline.cc:87] Retriangulation and Global bundle adjustment
+I20260812 16:26:13.202970 558585 incremental_pipeline.cc:607] Registering image #10 (num_reg_frames=5)
+I20260812 16:26:13.203006 558585 incremental_pipeline.cc:610] => Image sees 3004 / 7412 points
+I20260812 16:26:13.420719 558585 incremental_pipeline.cc:87] Retriangulation and Global bundle adjustment
+I20260812 16:26:13.675654 558585 incremental_pipeline.cc:607] Registering image #20 (num_reg_frames=6)
+I20260812 16:26:13.675688 558585 incremental_pipeline.cc:610] => Image sees 3090 / 7640 points
+I20260812 16:26:13.943739 558585 incremental_pipeline.cc:87] Retriangulation and Global bundle adjustment
+I20260812 16:26:14.283649 558585 incremental_pipeline.cc:607] Registering image #19 (num_reg_frames=7)
+I20260812 16:26:14.283699 558585 incremental_pipeline.cc:610] => Image sees 4287 / 7315 points
+I20260812 16:26:14.620524 558585 incremental_pipeline.cc:87] Retriangulation and Global bundle adjustment
+I20260812 16:26:14.976476 558585 incremental_pipeline.cc:607] Registering image #6 (num_reg_frames=8)
+I20260812 16:26:14.976508 558585 incremental_pipeline.cc:610] => Image sees 3848 / 7385 points
+I20260812 16:26:15.268374 558585 incremental_pipeline.cc:87] Retriangulation and Global bundle adjustment
+I20260812 16:26:15.690805 558585 incremental_pipeline.cc:607] Registering image #15 (num_reg_frames=9)
+I20260812 16:26:15.690847 558585 incremental_pipeline.cc:610] => Image sees 3707 / 7120 points
+I20260812 16:26:15.984299 558585 incremental_pipeline.cc:87] Retriangulation and Global bundle adjustment
+I20260812 16:26:16.355746 558585 incremental_pipeline.cc:607] Registering image #13 (num_reg_frames=10)
+I20260812 16:26:16.355782 558585 incremental_pipeline.cc:610] => Image sees 3772 / 7115 points
+I20260812 16:26:16.634408 558585 incremental_pipeline.cc:87] Retriangulation and Global bundle adjustment
+I20260812 16:26:17.032111 558585 incremental_pipeline.cc:607] Registering image #17 (num_reg_frames=11)
+I20260812 16:26:17.032151 558585 incremental_pipeline.cc:610] => Image sees 3725 / 7363 points
+I20260812 16:26:17.475462 558585 incremental_pipeline.cc:607] Registering image #9 (num_reg_frames=12)
+I20260812 16:26:17.475497 558585 incremental_pipeline.cc:610] => Image sees 3533 / 7111 points
+I20260812 16:26:17.768491 558585 incremental_pipeline.cc:87] Retriangulation and Global bundle adjustment
+I20260812 16:26:18.163640 558585 incremental_pipeline.cc:607] Registering image #21 (num_reg_frames=13)
+I20260812 16:26:18.163671 558585 incremental_pipeline.cc:610] => Image sees 3583 / 7301 points
+I20260812 16:26:18.574952 558585 incremental_pipeline.cc:607] Registering image #7 (num_reg_frames=14)
+I20260812 16:26:18.574990 558585 incremental_pipeline.cc:610] => Image sees 3192 / 6721 points
+I20260812 16:26:18.843230 558585 incremental_pipeline.cc:87] Retriangulation and Global bundle adjustment
+I20260812 16:26:19.372362 558585 incremental_pipeline.cc:607] Registering image #4 (num_reg_frames=15)
+I20260812 16:26:19.372428 558585 incremental_pipeline.cc:610] => Image sees 3374 / 5902 points
+I20260812 16:26:19.726733 558585 incremental_pipeline.cc:607] Registering image #16 (num_reg_frames=16)
+I20260812 16:26:19.726769 558585 incremental_pipeline.cc:610] => Image sees 3295 / 5154 points
+I20260812 16:26:19.978343 558585 incremental_pipeline.cc:87] Retriangulation and Global bundle adjustment
+I20260812 16:26:20.508188 558585 incremental_pipeline.cc:607] Registering image #18 (num_reg_frames=17)
+I20260812 16:26:20.508220 558585 incremental_pipeline.cc:610] => Image sees 3305 / 7068 points
+I20260812 16:26:20.873989 558585 incremental_pipeline.cc:607] Registering image #22 (num_reg_frames=18)
+I20260812 16:26:20.874027 558585 incremental_pipeline.cc:610] => Image sees 3209 / 7230 points
+I20260812 16:26:21.157176 558585 incremental_pipeline.cc:87] Retriangulation and Global bundle adjustment
+I20260812 16:26:21.770037 558585 incremental_pipeline.cc:607] Registering image #2 (num_reg_frames=19)
+I20260812 16:26:21.770071 558585 incremental_pipeline.cc:610] => Image sees 3047 / 6465 points
+I20260812 16:26:22.156154 558585 incremental_pipeline.cc:607] Registering image #25 (num_reg_frames=20)
+I20260812 16:26:22.156195 558585 incremental_pipeline.cc:610] => Image sees 3187 / 7548 points
+I20260812 16:26:22.415275 558585 incremental_pipeline.cc:87] Retriangulation and Global bundle adjustment
+I20260812 16:26:23.086011 558585 incremental_pipeline.cc:607] Registering image #5 (num_reg_frames=21)
+I20260812 16:26:23.086046 558585 incremental_pipeline.cc:610] => Image sees 3179 / 6920 points
+I20260812 16:26:23.483481 558585 incremental_pipeline.cc:607] Registering image #23 (num_reg_frames=22)
+I20260812 16:26:23.483520 558585 incremental_pipeline.cc:610] => Image sees 3403 / 7509 points
+I20260812 16:26:23.885401 558585 incremental_pipeline.cc:607] Registering image #1 (num_reg_frames=23)
+I20260812 16:26:23.885439 558585 incremental_pipeline.cc:610] => Image sees 3485 / 7330 points
+I20260812 16:26:24.198580 558585 incremental_pipeline.cc:87] Retriangulation and Global bundle adjustment
+I20260812 16:26:25.052778 558585 incremental_pipeline.cc:607] Registering image #27 (num_reg_frames=24)
+I20260812 16:26:25.052819 558585 incremental_pipeline.cc:610] => Image sees 3657 / 6271 points
+I20260812 16:26:25.469574 558585 incremental_pipeline.cc:607] Registering image #3 (num_reg_frames=25)
+I20260812 16:26:25.469659 558585 incremental_pipeline.cc:610] => Image sees 3695 / 5923 points
+I20260812 16:26:25.887041 558585 incremental_pipeline.cc:607] Registering image #26 (num_reg_frames=26)
+I20260812 16:26:25.887081 558585 incremental_pipeline.cc:610] => Image sees 2543 / 7884 points
+I20260812 16:26:26.200094 558585 incremental_pipeline.cc:87] Retriangulation and Global bundle adjustment
+I20260812 16:26:26.941757 558585 incremental_pipeline.cc:607] Registering image #28 (num_reg_frames=27)
+I20260812 16:26:26.941790 558585 incremental_pipeline.cc:610] => Image sees 2612 / 7508 points
+I20260812 16:26:27.309589 558585 incremental_pipeline.cc:607] Registering image #29 (num_reg_frames=28)
+I20260812 16:26:27.309623 558585 incremental_pipeline.cc:610] => Image sees 4395 / 7651 points
+I20260812 16:26:27.614001 558585 incremental_pipeline.cc:87] Retriangulation and Global bundle adjustment
+I20260812 16:26:28.459591 558585 incremental_pipeline.cc:607] Registering image #31 (num_reg_frames=29)
+I20260812 16:26:28.459623 558585 incremental_pipeline.cc:610] => Image sees 4627 / 7292 points
+I20260812 16:26:28.942569 558585 incremental_pipeline.cc:607] Registering image #33 (num_reg_frames=30)
+I20260812 16:26:28.942600 558585 incremental_pipeline.cc:610] => Image sees 4476 / 7160 points
+I20260812 16:26:29.413157 558585 incremental_pipeline.cc:607] Registering image #30 (num_reg_frames=31)
+I20260812 16:26:29.413194 558585 incremental_pipeline.cc:610] => Image sees 3975 / 5735 points
+I20260812 16:26:29.691768 558585 incremental_pipeline.cc:87] Retriangulation and Global bundle adjustment
+I20260812 16:26:30.719758 558585 incremental_pipeline.cc:607] Registering image #32 (num_reg_frames=32)
+I20260812 16:26:30.719827 558585 incremental_pipeline.cc:610] => Image sees 4203 / 8347 points
+I20260812 16:26:31.194922 558585 incremental_pipeline.cc:607] Registering image #37 (num_reg_frames=33)
+I20260812 16:26:31.194958 558585 incremental_pipeline.cc:610] => Image sees 3921 / 8334 points
+I20260812 16:26:31.707609 558585 incremental_pipeline.cc:607] Registering image #34 (num_reg_frames=34)
+I20260812 16:26:31.707643 558585 incremental_pipeline.cc:610] => Image sees 4919 / 8801 points
+I20260812 16:26:32.207059 558585 incremental_pipeline.cc:607] Registering image #35 (num_reg_frames=35)
+I20260812 16:26:32.207099 558585 incremental_pipeline.cc:610] => Image sees 4127 / 6804 points
+I20260812 16:26:32.642529 558585 incremental_pipeline.cc:87] Retriangulation and Global bundle adjustment
+I20260812 16:26:33.932840 558585 incremental_pipeline.cc:607] Registering image #38 (num_reg_frames=36)
+I20260812 16:26:33.932883 558585 incremental_pipeline.cc:610] => Image sees 4503 / 9186 points
+I20260812 16:26:34.563041 558585 incremental_pipeline.cc:607] Registering image #36 (num_reg_frames=37)
+I20260812 16:26:34.563078 558585 incremental_pipeline.cc:610] => Image sees 4531 / 8777 points
+I20260812 16:26:35.102073 558585 incremental_pipeline.cc:607] Registering image #39 (num_reg_frames=38)
+I20260812 16:26:35.102133 558585 incremental_pipeline.cc:610] => Image sees 3682 / 5529 points
+I20260812 16:26:35.503747 558585 incremental_pipeline.cc:87] Retriangulation and Global bundle adjustment
+I20260812 16:26:36.585567 558585 incremental_pipeline.cc:87] Retriangulation and Global bundle adjustment
+I20260812 16:26:37.505254 558585 incremental_pipeline.cc:793] Keeping successful reconstruction
+I20260812 16:26:37.550140 558585 timer.cc:90] Elapsed time: 0.436 [minutes]
+I20260812 16:27:09.313266 558585 bundle_adjustment_ceres.cc:1136] Bundle adjustment report
+    Residuals : 443865
+   Parameters : 131575
+   Iterations : 6
+         Time : 0.910285 [s]
+ Initial cost : 0.444252 [px]
+   Final cost : 0.444242 [px]
+  Termination : CONVERGENCE
+
