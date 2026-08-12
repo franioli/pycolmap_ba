@@ -1,0 +1,29 @@
+[project]
+name = "enrich-aerial"
+version = "0.1.0"
+# Upper-bounded because the local pycolmap wheel is cp312-only.
+requires-python = ">=3.12,<3.13"
+
+dependencies = [
+    "imageio>=2.37.4",
+    "ipykernel>=7.3.0",
+    "matplotlib>=3.11.1",
+    "numpy>=2.0",
+    "open3d>=0.19.0",
+    "opencv-python>=5.0.0.93",
+    "pandas>=3.0.5",
+    "pyceres>=2.6",
+    "pycolmap>=4.2.0.dev0",
+]
+
+[project.optional-dependencies]
+metashape = ["metashape"]
+scop = ["scop>=2606.0"]
+all = ["metashape", "scop>=2606.0"]
+
+[tool.uv.sources]
+pycolmap = { path = "/home/francesco/software/wheels/pycolmap-4.2.0.dev0-cp312-cp312-linux_x86_64.whl" }
+scop = { path = "/home/francesco/dev/scop" }
+metashape = [
+    { url = "https://download.agisoft.com/metashape-2.3.1-cp39.cp310.cp311.cp312.cp313-abi3-linux_x86_64.whl", marker = "sys_platform == 'linux'" },
+]
