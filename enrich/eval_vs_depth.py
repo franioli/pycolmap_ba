@@ -20,34 +20,18 @@ from pathlib import Path
 import numpy as np
 import pycolmap
 
-import enrich_data
+from pycolmap_ba.utils import nmad
 
-ROOT = Path(__file__).parent
-SPARSE_PATH = ROOT / "nadir-2/colmap/sparse_gcp"
+import enrich_data
+from enrich_data import sample_depth
+
+SPARSE_PATH = (
+    Path(__file__).resolve().parents[1] / "data/ENRICH-Aerial/nadir-2/colmap/sparse_gcp"
+)
 
 # Filtering: drop weak/poorly conditioned points before scoring.
 MIN_TRACK_LENGTH = 3
 MAX_REPROJ_ERROR = 2.0  # px
-
-# A GT depth discontinuity (roof edge, tree) makes bilinear sampling
-# meaningless, so skip pixels whose local neighbourhood is not smooth.
-MAX_LOCAL_DEPTH_RANGE = 1.0  # m, over a 3x3 window
-
-
-def nmad(x):
-    """Normalised median absolute deviation - a robust sigma."""
-    return 1.4826 * np.median(np.abs(x - np.median(x)))
-
-
-def sample_depth(depth, u, v, max_range=MAX_LOCAL_DEPTH_RANGE):
-    """GT depth at (u, v), or None if the neighbourhood is not smooth."""
-    col, row = int(u), int(v)
-    if not (1 <= col < depth.shape[1] - 1 and 1 <= row < depth.shape[0] - 1):
-        return None
-    window = depth[row - 1 : row + 2, col - 1 : col + 2]
-    if not np.isfinite(window).all() or window.max() - window.min() > max_range:
-        return None  # depth discontinuity: sampling would be ambiguous
-    return float(window[1, 1])
 
 
 def depth_map_offset(truth):
@@ -87,11 +71,10 @@ def main():
         f"{rec.compute_mean_reprojection_error():.3f} px reprojection"
     )
 
-    images = {im.name: im for im in rec.images.values()}
     depth_cache = {}
     residuals, track_lengths, xy = [], [], []
 
-    for point_id, point in rec.points3D.items():
+    for point in rec.points3D.values():
         if point.track.length() < MIN_TRACK_LENGTH or point.error > MAX_REPROJ_ERROR:
             continue
         for element in point.track.elements:
@@ -162,7 +145,7 @@ def main():
     radius = np.linalg.norm(xy - centre, axis=1)
     print("\n  by distance from block centre (doming check):")
     edges = np.percentile(radius, [0, 25, 50, 75, 100])
-    for lo, hi in zip(edges[:-1], edges[1:]):
+    for lo, hi in zip(edges[:-1], edges[1:], strict=True):
         m = (radius >= lo) & (radius <= hi)
         print(
             f"    {lo:6.0f}-{hi:6.0f} m: n={m.sum():6d}  "

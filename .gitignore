@@ -1,4 +1,8 @@
 data/
+sandbox/
+
+# COLMAP's glog output, written next to whatever ran the pipeline
+INFO.log*
 
 # Python-generated files
 __pycache__/

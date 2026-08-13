@@ -22,7 +22,9 @@ import cv2
 import numpy as np
 import pandas as pd
 
-ROOT = Path(__file__).parent / "data/ENRICH-Aerial"  # dataset root folder
+# Dataset root folder. A default, not a fixture: every loader takes it as an
+# argument, so the data can live anywhere.
+DATA_ROOT = Path(__file__).resolve().parents[1] / "data/ENRICH-Aerial"
 
 # Default camera/sub-block filter, e.g. "nadir-2". None loads the whole dataset.
 SUBBLOCK = None
@@ -77,6 +79,7 @@ class EnrichData:
 def load(
     subblock: str | None = SUBBLOCK,
     split_control_check: bool = False,
+    data_root: Path = DATA_ROOT,
 ) -> EnrichData:
     """Read the dataset as it is, via the official loaders. No noise.
 
@@ -85,10 +88,11 @@ def load(
             substring of the image name. None (the default) loads every camera.
         split_control_check: if True, subdivide markers into ground control
             points and check points. If False, leave that subdivision unset.
+        data_root: dataset root folder.
     """
-    cameras = load_camera_gt(ROOT)
-    gcp_world = load_gcp_locations(ROOT)
-    visibility = load_gcp_visibility(ROOT)
+    cameras = load_camera_gt(data_root)
+    gcp_world = load_gcp_locations(data_root)
+    visibility = load_gcp_visibility(data_root)
 
     # Flatten {image: {marker: (u,v)}} into a tidy frame, subblock only.
     rows = [
@@ -136,8 +140,8 @@ def load(
         control_names=control_names,
         check_names=check_names,
         marker_type=marker_type,
-        image_paths=get_image_list(ROOT, camera_name=subblock),
-        depth_paths=get_image_list(ROOT, camera_name=subblock, is_depth=True),
+        image_paths=get_image_list(data_root, camera_name=subblock),
+        depth_paths=get_image_list(data_root, camera_name=subblock, is_depth=True),
     )
 
 
@@ -191,7 +195,15 @@ def cam_from_world(data: EnrichData, label: str):
     return pycolmap.Rigid3d(pycolmap.Rotation3d(R), -R @ center)
 
 
-def load_depth(image_name: str) -> np.ndarray:
+def cam_from_world_all(data: EnrichData) -> dict:
+    """Ground-truth poses for every camera, keyed by image name.
+
+    Ready to hand to `pycolmap_ba.utils.GroundTruth(cam_from_world=...)`.
+    """
+    return {label: cam_from_world(data, label) for label in data.cameras}
+
+
+def load_depth(image_name: str, data_root: Path = DATA_ROOT) -> np.ndarray:
     """Ground-truth depth map for an image, in metres.
 
     Values are **z-depth along the optical axis**, not ray length (verified: a
@@ -204,11 +216,36 @@ def load_depth(image_name: str) -> np.ndarray:
     import imageio.v3 as iio
 
     stem = Path(image_name).stem
-    path = ROOT / "depth" / "exr" / f"{stem}_depth.exr"
+    path = data_root / "depth" / "exr" / f"{stem}_depth.exr"
     depth = np.asarray(iio.imread(path), dtype=np.float32)
     if depth.ndim == 3:  # some writers store a single channel as HxWx1
         depth = depth[..., 0]
     return depth
+
+
+def sample_depth(depth: np.ndarray, u: float, v: float, max_range: float = 1.0):
+    """Ground-truth depth at (u, v), or None if the neighbourhood is not smooth.
+
+    A depth discontinuity (roof edge, tree) makes sampling ambiguous - a
+    sub-pixel shift changes the value by metres - so pixels whose 3x3
+    neighbourhood spans more than `max_range` metres are rejected instead.
+
+    Args:
+        depth: Depth map, metres.
+        u: Column coordinate, pixels.
+        v: Row coordinate, pixels.
+        max_range: Maximum depth spread tolerated over the 3x3 window, metres.
+
+    Returns:
+        The depth at the nearest pixel, or None.
+    """
+    col, row = int(u), int(v)
+    if not (1 <= col < depth.shape[1] - 1 and 1 <= row < depth.shape[0] - 1):
+        return None
+    window = depth[row - 1 : row + 2, col - 1 : col + 2]
+    if not np.isfinite(window).all() or window.max() - window.min() > max_range:
+        return None  # depth discontinuity: sampling would be ambiguous
+    return float(window[1, 1])
 
 
 def summary(data: EnrichData) -> str:
@@ -341,7 +378,7 @@ def load_camera_gt(directory: Path, fmt: Literal["csv", "tsv"] = "csv") -> dict:
     """
     camera_gt = {}
     with open(
-        directory.joinpath("cameras." + fmt), mode="r", encoding="utf-8", newline=""
+        directory.joinpath("cameras." + fmt), encoding="utf-8", newline=""
     ) as gt_file:
         reader = csv.DictReader(gt_file, delimiter="," if fmt == "csv" else "\t")
         for row in reader:
@@ -394,7 +431,7 @@ def load_gcp_locations(directory: Path, fmt: Literal["csv", "tsv"] = "csv") -> d
     """
     gcps = {}
     with open(
-        directory.joinpath("gcp_list." + fmt), mode="r", encoding="utf-8", newline=""
+        directory.joinpath("gcp_list." + fmt), encoding="utf-8", newline=""
     ) as gcp_file:
         reader = csv.DictReader(gcp_file, delimiter="," if fmt == "csv" else "\t")
         for row in reader:
@@ -432,7 +469,6 @@ def load_gcp_visibility(directory: Path, fmt: Literal["csv", "tsv"] = "csv") -> 
     camera_gcp_visibility = {}
     with open(
         directory.joinpath("gcp_images_list." + fmt),
-        mode="r",
         encoding="utf-8",
         newline="",
     ) as gt_file:

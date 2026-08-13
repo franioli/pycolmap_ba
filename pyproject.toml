@@ -1,10 +1,12 @@
 [project]
-name = "enrich-aerial"
+name = "pycolmap-ba"
 version = "0.1.0"
+description = "Custom bundle adjustment (GCPs, pose priors) on top of pycolmap."
 # Upper-bounded because the local pycolmap wheel is cp312-only.
 requires-python = ">=3.12,<3.13"
 
 dependencies = [
+    "enlighten>=1.12",
     "imageio>=2.37.4",
     "ipykernel>=7.3.0",
     "matplotlib>=3.11.1",
@@ -21,9 +23,43 @@ metashape = ["metashape"]
 scop = ["scop>=2606.0"]
 all = ["metashape", "scop>=2606.0"]
 
+[dependency-groups]
+dev = ["ruff>=0.9"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pycolmap_ba"]
+
 [tool.uv.sources]
 pycolmap = { path = "/home/francesco/software/wheels/pycolmap-4.2.0.dev0-cp312-cp312-linux_x86_64.whl" }
 scop = { path = "/home/francesco/dev/scop" }
 metashape = [
     { url = "https://download.agisoft.com/metashape-2.3.1-cp39.cp310.cp311.cp312.cp313-abi3-linux_x86_64.whl", marker = "sys_platform == 'linux'" },
 ]
+
+[tool.ruff]
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "D"]
+# D105/D107: magic methods and __init__ are documented by the class docstring.
+ignore = ["D105", "D107"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.isort]
+known-first-party = ["pycolmap_ba"]
+known-local-folder = ["enrich_data"]
+
+[tool.ruff.lint.per-file-ignores]
+# The vendored upstream examples are reference material, kept verbatim.
+"pycolmap_examples/*" = ["D", "E", "B", "UP"]
+# Application layer: scripts document themselves in their module docstring, and
+# the second half of enrich_data.py is the dataset's own loader code, verbatim.
+"examples/*" = ["D103"]
+"enrich/*" = ["D103"]
+"enrich/enrich_data.py" = ["D205", "E501"]

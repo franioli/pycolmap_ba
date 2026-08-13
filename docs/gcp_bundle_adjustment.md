@@ -1,6 +1,10 @@
 # GCP-based bundle adjustment — the logic
 
-Reference note for `ba_gcp.py` (ENRICH-Aerial, nadir-2 subblock).
+Reference note for
+[`src/pycolmap_ba/backend/constraints.py`](../src/pycolmap_ba/backend/constraints.py)
+and its application in
+[`enrich/enrich_aerial_sfm_gcp.ipynb`](../enrich/enrich_aerial_sfm_gcp.ipynb)
+(ENRICH-Aerial, nadir-2 subblock).
 
 ---
 
@@ -203,6 +207,12 @@ manifold already set. For a single-camera rig `cam_from_world == rig_from_world`
 Robust loss (Cauchy) on the image marks absorbs mis-identified targets; the
 world priors stay quadratic.
 
+In code, that diagram is `add_marker_constraints` in
+[`backend/constraints.py`](../src/pycolmap_ba/backend/constraints.py); the
+assembly, gauge handling, solve and filtering around it are
+`run_bundle_adjustment` in
+[`backend/bundle.py`](../src/pycolmap_ba/backend/bundle.py).
+
 ---
 
 ## 8. Pitfalls encountered
@@ -245,5 +255,7 @@ the ground) that leaks into the check points. Worth resolving at source.
 - Schönberger & Frahm, *Structure-from-Motion Revisited*, CVPR 2016 (COLMAP).
 - Ceres Solver documentation — `NormalPrior`, `LossFunction`, `Manifold`,
   solver options: <http://ceres-solver.org/>
-- Local: `ba_gcp.py`, and `ba_tutorial.py` in the belvedere project for a
-  from-scratch BA walkthrough including a GCP stage.
+- Local: `pycolmap_examples/` (upstream COLMAP python examples — gauge fixing,
+  the mapper reimplemented in Python, synthetic datasets), and `ba_tutorial.py`
+  in the belvedere project for a from-scratch BA walkthrough including a GCP
+  stage.
