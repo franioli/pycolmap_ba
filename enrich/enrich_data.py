@@ -48,7 +48,7 @@ BLENDER_TO_OPENCV = np.diag([1.0, -1.0, -1.0])
 
 # --- noise applied to the Blender truth ------------------------------------
 tie_points_sigma_px = 0.5  # 1-sigma on the Blender tie points in pixels
-camera_position_sigma_m = 0.10  # 1-sigma on the Blender camera centres
+camera_position_sigma_m = 1  # 1-sigma on the Blender camera centres
 gcp_sigma_m = [0.02, 0.02, 0.03]  # [x,y,z] or [xyz] 1-sigma on the Blender GCPs
 gcp_sigma_px = 1.0  # 1-sigma on the Blender GCP image marks
 

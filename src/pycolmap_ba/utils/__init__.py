@@ -1,4 +1,4 @@
-"""Helpers: alignment geometry, printed reports and reconstruction export."""
+"""Helpers: alignment geometry, perturbation, printed reports and export."""
 
 from .geometry import (
     align_to_positions,
@@ -6,7 +6,8 @@ from .geometry import (
     rotation_error_deg,
     umeyama,
 )
-from .io import export_reconstruction, save_point_cloud_as_ply
+from .io import export_reconstruction, save_point_cloud_as_ply, save_points_as_ply
+from .perturb import Perturbation, PerturbationReport, perturb_reconstruction
 from .report import (
     GroundTruth,
     accuracy_report,
@@ -19,6 +20,8 @@ from .report import (
 
 __all__ = [
     "GroundTruth",
+    "Perturbation",
+    "PerturbationReport",
     "accuracy_report",
     "align_to_positions",
     "banner",
@@ -27,8 +30,10 @@ __all__ = [
     "compare_to_reconstruction",
     "export_reconstruction",
     "nmad",
+    "perturb_reconstruction",
     "rotation_error_deg",
     "save_point_cloud_as_ply",
+    "save_points_as_ply",
     "stats",
     "umeyama",
 ]

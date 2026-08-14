@@ -13,7 +13,11 @@ from pathlib import Path
 import numpy as np
 import pycolmap
 
-__all__ = ["export_reconstruction", "save_point_cloud_as_ply"]
+__all__ = [
+    "export_reconstruction",
+    "save_point_cloud_as_ply",
+    "save_points_as_ply",
+]
 
 
 def export_reconstruction(
@@ -49,7 +53,9 @@ def export_reconstruction(
 
 
 def save_point_cloud_as_ply(
-    reconstruction: pycolmap.Reconstruction, output_path: Path
+    reconstruction: pycolmap.Reconstruction,
+    output_path: Path,
+    **scalars: np.ndarray,
 ) -> bool:
     """Save the 3D points as a PLY carrying track length and reprojection error.
 
@@ -61,9 +67,15 @@ def save_point_cloud_as_ply(
     Args:
         reconstruction: Source of the points.
         output_path: Destination `.ply` file.
+        **scalars: Extra per-point fields, each `(N,)` in the iteration order of
+            `reconstruction.points3D` - e.g. `surface_distance=...` to colour the
+            cloud by its residual against a reference surface in CloudCompare.
 
     Returns:
         True if open3d reported a successful write.
+
+    Raises:
+        ValueError: If a scalar array does not have one entry per point.
     """
     import open3d as o3d
 
@@ -79,4 +91,47 @@ def save_point_cloud_as_ply(
     cloud.point.reproj_error = o3d.core.Tensor(
         np.array([[p.error] for p in points], np.float32)
     )
+    for name, values in scalars.items():
+        values = np.asarray(values, dtype=np.float32).reshape(-1, 1)
+        if len(values) != len(points):
+            raise ValueError(
+                f"{name!r} has {len(values)} values for {len(points)} points"
+            )
+        setattr(cloud.point, name, o3d.core.Tensor(values))
+    return o3d.t.io.write_point_cloud(str(output_path), cloud)
+
+
+def save_points_as_ply(
+    points: np.ndarray, output_path: Path, **scalars: np.ndarray
+) -> bool:
+    """Save a plain `(N, 3)` array as a PLY, with optional per-point fields.
+
+    The counterpart of `save_point_cloud_as_ply` for clouds that are not a
+    reconstruction - a reference LiDAR / TLS cloud, say, written out so it can be
+    overlaid on the sparse cloud in CloudCompare.
+
+    Args:
+        points: `(N, 3)` coordinates.
+        output_path: Destination `.ply` file.
+        **scalars: Extra per-point fields, each `(N,)`.
+
+    Returns:
+        True if open3d reported a successful write.
+
+    Raises:
+        ValueError: If `points` is not `(N, 3)` or a scalar length disagrees.
+    """
+    import open3d as o3d
+
+    xyz = np.asarray(points, dtype=np.float32)
+    if xyz.ndim != 2 or xyz.shape[1] != 3:
+        raise ValueError(f"points must be (N, 3), got {xyz.shape}")
+
+    cloud = o3d.t.geometry.PointCloud()
+    cloud.point.positions = o3d.core.Tensor(xyz)
+    for name, values in scalars.items():
+        values = np.asarray(values, dtype=np.float32).reshape(-1, 1)
+        if len(values) != len(xyz):
+            raise ValueError(f"{name!r} has {len(values)} values for {len(xyz)} points")
+        setattr(cloud.point, name, o3d.core.Tensor(values))
     return o3d.t.io.write_point_cloud(str(output_path), cloud)

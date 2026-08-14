@@ -102,10 +102,12 @@ def add_camera_pose_constraints(
         rot_cov = cov_in_tie_units(
             np.deg2rad(priors.sigma_rot_deg), tie_points_sigma_px, 3
         )
-        pose_cov = np.block([
-            [rot_cov, np.zeros((3, 3))],
-            [np.zeros((3, 3)), pos_cov],
-        ])
+        pose_cov = np.block(
+            [
+                [rot_cov, np.zeros((3, 3))],
+                [np.zeros((3, 3)), pos_cov],
+            ]
+        )
     prior_poses = priors.cam_from_world or {}
     robust = (
         pyceres.CauchyLoss(priors.robust_loss_scale)

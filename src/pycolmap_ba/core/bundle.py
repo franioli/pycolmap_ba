@@ -1,9 +1,18 @@
-"""Backend: assemble, solve and filter a customised bundle adjustment.
+"""Backend: assemble and solve one customised bundle adjustment.
 
-One entry point, `run_bundle_adjustment`, covers a plain bundle, marker
-(GCP) controlled georeferencing, GNSS-constrained adjustment, or any
-combination, by adding the blocks from `constraints` to COLMAP's own Ceres
-problem before solving it.
+One entry point, `run_bundle_adjustment`, covers a plain bundle, marker (GCP)
+controlled georeferencing, GNSS-constrained adjustment, reference-cloud
+(LiDAR / TLS) constrained adjustment, or any combination, by adding the blocks
+from `gcp`, `camera_pose` and `reference_cloud` to COLMAP's own Ceres problem
+before solving it.
+
+Deliberately just the one solve. The neighbouring modules hold the things that
+are not part of assembling and solving it:
+
+* `filtering`  - post-solve removal of unsupportable points
+* `covariance` - posterior covariances of the result
+* `prealign`   - getting the block into range before any of this
+* `cloud_bundle` - alternating solve / re-correspondence around this function
 
 Examples:
     Markers as control, plus camera position priors::
@@ -32,6 +41,14 @@ Examples:
 
         result = run_bundle_adjustment(rec)
 
+    A LiDAR / TLS cloud as the whole datum, no GCPs, with the intrinsics free::
+
+        cloud = ReferenceCloud.from_points(lidar_xyz, sigma_ref=0.02)
+        result = run_cloud_constrained_bundle_adjustment(
+            rec, cloud, solver=SolverOptions(refine_extra_params=True)
+        )
+        print(datum_information(...).summary())   # did it really fix all 7 DoF?
+
 For full control over Ceres itself, build the adjuster as done here and then
 call `options.ceres.create_solver_options(config, adjuster.problem)` followed by
 `pyceres.solve(...)`, as in `pycolmap_examples/custom_bundle_adjustment.py`.
@@ -46,21 +63,25 @@ from typing import Any
 import numpy as np
 import pycolmap
 
-from .constraints import (
+from .camera_pose import (
     CameraPoseConstraints,
-    MarkerConstraints,
     add_camera_pose_constraints,
-    add_marker_constraints,
 )
+from .cloud import (
+    CorrespondenceStats,
+    ReferenceCloud,
+    ReferenceCloudConstraints,
+    add_reference_cloud_constraints,
+)
+from .covariance import estimate_covariance
+from .filtering import FilterOptions, filter_reconstruction
+from .gcp import MarkerConstraints, add_marker_constraints
 
 __all__ = [
     "BundleResult",
-    "FilterOptions",
     "SolverOptions",
     "build_config",
     "build_options",
-    "estimate_covariance",
-    "filter_reconstruction",
     "run_bundle_adjustment",
     "solve_to_convergence",
 ]
@@ -122,28 +143,6 @@ class SolverOptions:
 
 
 @dataclass
-class FilterOptions:
-    """Post-solve filtering, applied through COLMAP's `ObservationManager`.
-
-    Unlike `SolverOptions.min_track_length`, these actually delete points, and
-    they go through the observation manager so COLMAP's internal correspondence
-    bookkeeping stays consistent (raw `Reconstruction.delete_point3D` does not
-    maintain it).
-
-    Attributes:
-        max_reproj_error: Drop points above this reprojection error, pixels.
-        min_tri_angle_deg: Drop points whose best pairwise triangulation angle
-            is below this, **degrees** (COLMAP converts internally). On a block
-            with good overlap this is typically a no-op.
-        min_track_length: Drop points with fewer observations. 0 disables.
-    """
-
-    max_reproj_error: float = 4.0
-    min_tri_angle_deg: float = 1.5
-    min_track_length: int = 0
-
-
-@dataclass
 class BundleResult:
     """Outcome of `run_bundle_adjustment`.
 
@@ -157,10 +156,14 @@ class BundleResult:
         usable: Whether Ceres considers the solution usable. A solve can stop on
             the iteration cap - not converged - and still be perfectly usable.
         n_blocks: Residual-block counts by kind - `tie_points`, `marker_image`,
-            `marker_world`, `camera_pose`.
+            `marker_world`, `camera_pose`, `reference_cloud`.
         n_filtered: Observations removed by post-solve filtering.
         covariance: `pycolmap.BACovariance` when `covariance=True` was requested
             and the estimation succeeded, else None.
+        correspondences: Reference-cloud correspondence stats of this solve,
+            None if no reference cloud was used.
+        passes: Per-pass records from
+            `run_cloud_constrained_bundle_adjustment`, empty for a single solve.
     """
 
     reconstruction: pycolmap.Reconstruction
@@ -171,6 +174,8 @@ class BundleResult:
     n_blocks: dict[str, int] = field(default_factory=dict)
     n_filtered: int = 0
     covariance: Any = None
+    correspondences: CorrespondenceStats | None = None
+    passes: list[dict[str, Any]] = field(default_factory=list)
 
 
 def build_options(solver: SolverOptions) -> pycolmap.BundleAdjustmentOptions:
@@ -269,74 +274,14 @@ def solve_to_convergence(
     return summary, False
 
 
-def filter_reconstruction(
-    reconstruction: pycolmap.Reconstruction,
-    filters: FilterOptions,
-    verbose: bool = True,
-) -> int:
-    """Delete weak points through COLMAP's `ObservationManager`.
-
-    Uses the observation manager rather than `Reconstruction.delete_point3D` so
-    COLMAP's correspondence bookkeeping stays consistent.
-
-    Args:
-        reconstruction: Modified in place.
-        filters: Thresholds to apply.
-        verbose: Print how many observations were removed.
-
-    Returns:
-        Number of filtered observations.
-    """
-    manager = pycolmap.ObservationManager(reconstruction)
-    # Covers reprojection error, negative depth and triangulation angle.
-    n_filtered = manager.filter_all_points3D(
-        filters.max_reproj_error, filters.min_tri_angle_deg
-    )
-    if filters.min_track_length > 0:
-        n_filtered += manager.filter_points3D_with_short_tracks(
-            filters.min_track_length
-        )
-    if verbose:
-        print(
-            f"  filtered {n_filtered} observations -> "
-            f"{reconstruction.num_points3D():,} points remain"
-        )
-    return n_filtered
-
-
-def estimate_covariance(
-    reconstruction: pycolmap.Reconstruction,
-    bundle_adjuster: Any,
-    options: Any = None,
-) -> Any:
-    """Estimate posterior covariances for the adjusted parameters.
-
-    Thin wrapper on `pycolmap.estimate_ba_covariance_from_problem`, which needs
-    a problem whose structure suits the Schur complement trick. The marker
-    parameter blocks added by `add_marker_constraints` are extra 3-vectors that
-    are *not* registered as COLMAP points, so the estimation can legitimately
-    fail here - hence the None return rather than an exception.
-
-    Args:
-        reconstruction: The adjusted reconstruction.
-        bundle_adjuster: The adjuster that was solved.
-        options: A `pycolmap.BACovarianceOptions`. None uses the defaults.
-
-    Returns:
-        A `pycolmap.BACovariance`, or None if the estimation failed.
-    """
-    options = options or pycolmap.BACovarianceOptions()
-    return pycolmap.estimate_ba_covariance_from_problem(
-        options, reconstruction, bundle_adjuster.problem
-    )
-
-
 def run_bundle_adjustment(
     reconstruction: pycolmap.Reconstruction,
     *,
     solver: SolverOptions | None = None,
     markers: MarkerConstraints | None = None,
     camera_poses: CameraPoseConstraints | None = None,
+    reference_cloud: ReferenceCloud | None = None,
+    reference_options: ReferenceCloudConstraints | None = None,
     filters: FilterOptions | None = None,
     tie_points_sigma_px: float = 0.5,
     image_ids: Sequence[int] | None = None,
@@ -346,13 +291,20 @@ def run_bundle_adjustment(
     """Assemble and solve a bundle adjustment with optional extra constraints.
 
     Every constraint is optional, so the same call covers a plain bundle, marker
-    controlled georeferencing, GNSS-constrained adjustment, or any combination.
+    controlled georeferencing, GNSS-constrained adjustment, reference-cloud
+    (LiDAR / TLS) constrained adjustment, or any combination.
 
     Args:
         reconstruction: Adjusted in place.
         solver: Solver and refinement settings. None uses `SolverOptions()`.
         markers: Marker observations and world coordinates. None adds neither.
         camera_poses: Prior camera poses. None leaves the cameras free.
+        reference_cloud: Georeferenced LiDAR / TLS cloud to pull the tie points
+            onto. Correspondences are resolved once, here; refreshing them needs
+            an outer loop, so prefer `run_cloud_constrained_bundle_adjustment`
+            unless the block is already well aligned.
+        reference_options: Gates for the above. None uses the defaults, which
+            only matters when `reference_cloud` is given.
         filters: Post-solve filtering. None skips it.
         tie_points_sigma_px: Assumed 1-sigma of the tie-point observations,
             pixels. All other sigmas are expressed relative to this.
@@ -374,8 +326,13 @@ def run_bundle_adjustment(
     options = build_options(solver)
 
     # Anything that ties the block to world coordinates also fixes the datum.
-    # Only then is gauge fixing wrong: it would over-constrain the network.
-    anchored = markers is not None or camera_poses is not None
+    # Only then is gauge fixing wrong: it would over-constrain the network. A
+    # reference cloud counts, but only conditionally - on a plane-only scene it
+    # leaves the horizontal datum free, so check `datum_information` rather than
+    # assuming. `solver.gauge` stays available to force the issue either way.
+    anchored = (
+        markers is not None or camera_poses is not None or reference_cloud is not None
+    )
     gauge = solver.gauge
     if gauge is None and not anchored:
         gauge = pycolmap.BundleAdjustmentGauge.TWO_CAMS_FROM_WORLD
@@ -431,7 +388,9 @@ def run_bundle_adjustment(
         "marker_image": 0,
         "marker_world": 0,
         "camera_pose": 0,
+        "reference_cloud": 0,
     }
+    correspondences: CorrespondenceStats | None = None
 
     # pyceres does not take ownership of cost functions: without this list they
     # are garbage collected while Ceres still holds the pointers.
@@ -450,6 +409,18 @@ def run_bundle_adjustment(
             problem, reconstruction, camera_poses, tie_points_sigma_px, retained
         )
 
+    if reference_cloud is not None:
+        n_blocks["reference_cloud"], correspondences = add_reference_cloud_constraints(
+            problem,
+            reconstruction,
+            reference_cloud,
+            reference_options or ReferenceCloudConstraints(),
+            tie_points_sigma_px,
+            retained,
+        )
+        if verbose:
+            print(f"  {correspondences.summary()}")
+
     expected = sum(n_blocks.values())
     assert problem.num_residual_blocks() == expected, (
         f"{problem.num_residual_blocks()} residual blocks, expected {expected} - "
@@ -461,7 +432,8 @@ def run_bundle_adjustment(
             f" + {expected - n_blocks['tie_points']} added "
             f"({n_blocks['marker_image']} marker image, "
             f"{n_blocks['marker_world']} marker world, "
-            f"{n_blocks['camera_pose']} camera pose)"
+            f"{n_blocks['camera_pose']} camera pose, "
+            f"{n_blocks['reference_cloud']} reference cloud)"
         )
 
     summary, converged = solve_to_convergence(
@@ -491,4 +463,5 @@ def run_bundle_adjustment(
         n_blocks=n_blocks,
         n_filtered=n_filtered,
         covariance=ba_covariance,
+        correspondences=correspondences,
     )

@@ -1,0 +1,72 @@
+"""Core: the bundle-adjustment machinery pycolmap does not provide.
+
+Each module has one job, so a change to how a constraint is weighted, how the
+block is registered, or how the result is filtered lands in exactly one place.
+
+Constraints - extra residual blocks on COLMAP's own Ceres problem:
+
+* `gcp`          - marker image observations and surveyed world coordinates
+* `camera_pose`  - GNSS / INS pose priors
+* `cloud`        - LiDAR / TLS reference-surface constraints on the tie points
+* `common`       - the weighting convention every one of them shares
+
+Solving, and the steps around it:
+
+* `bundle`       - assemble and solve **one** adjustment
+* `cloud_bundle` - alternate solving with reference-cloud re-correspondence
+* `prealign`     - global ICP registration, to get the block in range first
+* `filtering`    - post-solve removal of unsupportable points
+* `covariance`   - posterior covariances of the result
+"""
+
+from .bundle import (
+    BundleResult,
+    SolverOptions,
+    build_config,
+    build_options,
+    run_bundle_adjustment,
+    solve_to_convergence,
+)
+from .camera_pose import CameraPoseConstraints, add_camera_pose_constraints
+from .cloud import (
+    CorrespondenceStats,
+    DatumInformation,
+    ReferenceCloud,
+    ReferenceCloudConstraints,
+    add_reference_cloud_constraints,
+    datum_information,
+)
+from .cloud_bundle import run_cloud_constrained_bundle_adjustment
+from .common import cov_in_tie_units, covs_in_tie_units
+from .covariance import estimate_covariance
+from .filtering import FilterOptions, filter_reconstruction
+from .gcp import MarkerConstraints, add_marker_constraints
+from .prealign import PrealignResult, prealign_to_reference, residual_rms
+
+__all__ = [
+    "BundleResult",
+    "CameraPoseConstraints",
+    "CorrespondenceStats",
+    "DatumInformation",
+    "FilterOptions",
+    "MarkerConstraints",
+    "PrealignResult",
+    "ReferenceCloud",
+    "ReferenceCloudConstraints",
+    "SolverOptions",
+    "add_camera_pose_constraints",
+    "add_marker_constraints",
+    "add_reference_cloud_constraints",
+    "build_config",
+    "build_options",
+    "cov_in_tie_units",
+    "covs_in_tie_units",
+    "datum_information",
+    "estimate_covariance",
+    "filter_reconstruction",
+    "prealign_to_reference",
+    "residual_rms",
+    "run_bundle_adjustment",
+    "run_cloud_constrained_bundle_adjustment",
+    "solve_to_convergence",
+]

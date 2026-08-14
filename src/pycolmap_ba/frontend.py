@@ -6,7 +6,7 @@ Everything else is a direct pycolmap call and should stay that way: this module
 is deliberately small, and `pycolmap` remains the API of record.
 
 The georeferenced bundle that comes after mapping lives in
-`pycolmap_ba.backend`, the scoring and export in `pycolmap_ba.utils`.
+`pycolmap_ba.core`, the scoring and export in `pycolmap_ba.utils`.
 
 Examples:
     Free network with known intrinsics held fixed::
