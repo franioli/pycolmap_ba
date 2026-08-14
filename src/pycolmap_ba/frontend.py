@@ -368,7 +368,7 @@ def run_mapping(
     output_path: Path,
     options: MappingOptions | None = None,
     clean: bool = True,
-    write: bool = True,
+    write_text: bool = False,
     seed: int | None = None,
     progress: bool = False,
     verbose: bool = True,
@@ -382,7 +382,7 @@ def run_mapping(
         options: Mapper settings. None uses `MappingOptions()`.
         clean: Delete `output_path` first, so a previous - possibly distorted -
             reconstruction is never picked up and reused.
-        write: Also write the winning reconstruction at the top of `output_path`.
+        write_text: Also write the winning reconstruction as text format at the top of `output_path`.
         seed: Seed COLMAP's RNG for a reproducible run.
         progress: Show a registration progress bar (needs `enlighten`).
         verbose: Print a header and the resulting summary.
@@ -433,8 +433,9 @@ def run_mapping(
     best = reconstructions[
         max(reconstructions, key=lambda k: reconstructions[k].num_reg_images())
     ]
-    if write:
-        best.write(output_path)
+    if write_text:
+        # best.write(output_path)
+        best.write_text(output_path)
     if verbose:
         if len(reconstructions) > 1:
             sizes = [r.num_reg_images() for r in reconstructions.values()]

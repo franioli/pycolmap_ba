@@ -35,7 +35,7 @@ packages = ["src/pycolmap_ba"]
 
 [tool.uv.sources]
 pycolmap = { path = "/home/francesco/software/wheels/pycolmap-4.2.0.dev0-cp312-cp312-linux_x86_64.whl" }
-scop = { path = "/home/francesco/dev/scop" }
+scop = { path = "/home/francesco/dev/scop", editable = true }
 metashape = [
     { url = "https://download.agisoft.com/metashape-2.3.1-cp39.cp310.cp311.cp312.cp313-abi3-linux_x86_64.whl", marker = "sys_platform == 'linux'" },
 ]

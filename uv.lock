@@ -1070,8 +1070,8 @@ requires-dist = [
     { name = "pandas", specifier = ">=3.0.5" },
     { name = "pyceres", specifier = ">=2.6" },
     { name = "pycolmap", path = "../../software/wheels/pycolmap-4.2.0.dev0-cp312-cp312-linux_x86_64.whl" },
-    { name = "scop", marker = "extra == 'all'", directory = "../scop" },
-    { name = "scop", marker = "extra == 'scop'", directory = "../scop" },
+    { name = "scop", marker = "extra == 'all'", editable = "../scop" },
+    { name = "scop", marker = "extra == 'scop'", editable = "../scop" },
 ]
 provides-extras = ["metashape", "scop", "all"]
 
@@ -1424,7 +1424,7 @@ wheels = [
 [[package]]
 name = "scop"
 version = "2606.0"
-source = { directory = "../scop" }
+source = { editable = "../scop" }
 dependencies = [
     { name = "h5py" },
     { name = "jaxopt" },
