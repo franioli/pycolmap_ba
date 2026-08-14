@@ -71,16 +71,13 @@ tie-point residuals unweighted, so every sigma here is divided by
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import numpy as np
 import pyceres
 import pycolmap
 
 from .common import covs_in_tie_units
-
-if TYPE_CHECKING:  # pragma: no cover - typing only
-    import open3d as o3d
 
 __all__ = [
     "CorrespondenceStats",
@@ -105,7 +102,7 @@ class ReferenceCloud:
     outer passes of the adjustment. Only the *query* changes as the tie points
     move.
 
-    Use `from_points` or `from_mesh` rather than constructing this directly.
+    Use `from_points` rather than constructing this directly.
 
     Attributes:
         points: `(N, 3)` reference coordinates, metres, in the same frame as the
@@ -204,10 +201,8 @@ class ReferenceCloud:
         points: np.ndarray,
         *,
         k: int = 20,
-        radius: float | None = None,
         sigma_ref: float = 0.02,
         sigma_slack: float = 10.0,
-        voxel_size: float | None = None,
     ) -> ReferenceCloud:
         """Build the local surface distributions of a reference cloud.
 
@@ -215,13 +210,8 @@ class ReferenceCloud:
             points: `(N, 3)` reference coordinates, metres.
             k: Neighbours per patch. Large enough to be a stable plane fit,
                 small enough that a patch stays on one surface; 15-30 is usual.
-            radius: Cap the neighbourhood radius, metres, so a patch cannot span
-                a gap between two surfaces. None uses a plain k-NN.
             sigma_ref: Reference-cloud 1-sigma accuracy, metres.
             sigma_slack: Ceiling on the tangential sigmas, metres.
-            voxel_size: Voxel-downsample the cloud first, metres. Sensible for a
-                dense TLS survey, where full resolution buys nothing: the
-                constraint needs the surface, not every return.
 
         Returns:
             A `ReferenceCloud` with its k-NN index already built.
@@ -234,12 +224,6 @@ class ReferenceCloud:
         pts = np.ascontiguousarray(np.asarray(points, dtype=np.float64))
         if pts.ndim != 2 or pts.shape[1] != 3:
             raise ValueError(f"points must be (N, 3), got {pts.shape}")
-
-        if voxel_size is not None:
-            cloud = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(pts))
-            pts = np.ascontiguousarray(
-                np.asarray(cloud.voxel_down_sample(voxel_size).points)
-            )
 
         n = pts.shape[0]
         if n <= k:
@@ -261,11 +245,10 @@ class ReferenceCloud:
         for start in range(0, n, _CHUNK):
             block = pts[start : start + _CHUNK]
             query = o3d.core.Tensor(np.ascontiguousarray(block))
-            if radius is None:
-                idx = index.knn_search(query, k + 1)[0].numpy()
-            else:
-                idx = index.hybrid_search(query, float(radius), k + 1)[0].numpy()
-            # hybrid_search pads short neighbourhoods with -1.
+            idx = index.knn_search(query, k + 1)[0].numpy()
+            # hybrid_search pads short neighbourhoods with -1; knn_search
+            # cannot here, since n > k is already guaranteed above, but the
+            # rest of the loop stays general rather than assuming that.
             valid = idx >= 0
             cnt = valid.sum(axis=1)
             neigh = pts[np.where(valid, idx, 0)]  # (m, k+1, 3)
@@ -297,47 +280,6 @@ class ReferenceCloud:
             sigma_slack=sigma_slack,
             _index=index,
         )
-
-    @classmethod
-    def from_mesh(
-        cls,
-        mesh: o3d.geometry.TriangleMesh,
-        *,
-        n_points: int = 500_000,
-        noise_m: float = 0.0,
-        poisson: bool = False,
-        seed: int | None = None,
-        **kwargs: Any,
-    ) -> ReferenceCloud:
-        """Sample a mesh into a synthetic reference cloud.
-
-        For validating the constraint against a ground-truth model - the
-        deformation it is meant to remove can only be measured when the true
-        surface is known.
-
-        Args:
-            mesh: Source triangle mesh, already in the reconstruction's frame.
-            n_points: Number of samples.
-            noise_m: 1-sigma isotropic Gaussian noise added to each sample,
-                metres, standing in for the range noise of a real survey.
-            poisson: Use Poisson-disk sampling for an even, scanner-like
-                spacing. Much slower; uniform sampling is fine for most tests.
-            seed: Seed for the noise (the open3d sampler has its own RNG).
-            **kwargs: Forwarded to `from_points` (`k`, `sigma_ref`, ...).
-
-        Returns:
-            A `ReferenceCloud` built from the samples.
-        """
-        sampled = (
-            mesh.sample_points_poisson_disk(n_points)
-            if poisson
-            else mesh.sample_points_uniformly(n_points)
-        )
-        pts = np.asarray(sampled.points, dtype=np.float64)
-        if noise_m > 0.0:
-            pts = pts + np.random.default_rng(seed).normal(0.0, noise_m, pts.shape)
-        kwargs.setdefault("sigma_ref", max(noise_m, 0.005))
-        return cls.from_points(pts, **kwargs)
 
     def query(
         self, points: np.ndarray, max_dist: float
@@ -384,38 +326,20 @@ class ReferenceCloudConstraints:
             metres. The main clutter filter: a facade or a road is millimetres
             rough, vegetation is decimetres. A few times `sigma_ref` is a good
             starting point. None keeps every patch.
-        min_planarity: Optional Weinmann planarity floor in `[0, 1]`. None keeps
-            every patch, which is usually right: breaklines are stiff in two
-            directions and worth having. Note this does *not* protect the
-            horizontal datum - that comes from non-vertical normals (facades,
-            slopes), not from planarity. Prefer `max_roughness` for clutter.
-        max_normal_angle_deg: Optional gate on the angle between the patch
-            normal and the track's mean viewing direction. Drops grazing and
-            likely-occluded matches. None disables the test, which also skips
-            its per-track loop over the observations.
         robust_loss_scale: Cauchy scale, in whitened (sigma) units, so ~2 means
             "start downweighting past 2 sigma". None uses a plain L2 loss, which
             lets a single gross correspondence drag the datum.
-        max_points: Cap on the number of constrained points, sampled evenly over
-            those that pass the gates. None constrains all of them.
-        seed: Seed for that subsampling.
     """
 
     max_dist: float = 0.5
     min_track_length: int = 2
     min_neighbors: int = 6
     max_roughness: float | None = None
-    min_planarity: float | None = None
-    max_normal_angle_deg: float | None = None
     robust_loss_scale: float | None = 2.0
-    max_points: int | None = None
-    seed: int | None = 0
 
     def __post_init__(self) -> None:
         if self.max_dist <= 0:
             raise ValueError("max_dist must be positive")
-        if self.min_planarity is not None and not 0.0 <= self.min_planarity <= 1.0:
-            raise ValueError("min_planarity must lie in [0, 1]")
 
 
 @dataclass
@@ -439,7 +363,7 @@ class CorrespondenceStats:
             of the matched patch, metres. This is the quantity the residual
             actually penalises, and the one that should shrink between passes.
         rejected: Counts by reason - `no_match`, `track`, `neighbors`,
-            `roughness`, `planarity`, `viewing_angle`, `subsampled`.
+            `roughness`.
     """
 
     n_candidates: int = 0
@@ -595,32 +519,6 @@ def datum_information(
     )
 
 
-def _mean_viewing_directions(
-    reconstruction: pycolmap.Reconstruction, point3D_ids: list[int]
-) -> np.ndarray:
-    """Unit mean direction from each point towards the cameras that saw it."""
-    centres = {
-        image_id: image.projection_center()
-        for image_id, image in reconstruction.images.items()
-    }
-    out = np.zeros((len(point3D_ids), 3))
-    for row, pid in enumerate(point3D_ids):
-        point = reconstruction.points3D[pid]
-        acc = np.zeros(3)
-        for element in point.track.elements:
-            centre = centres.get(element.image_id)
-            if centre is None:
-                continue
-            ray = centre - point.xyz
-            norm = np.linalg.norm(ray)
-            if norm > 0:
-                acc += ray / norm
-        norm = np.linalg.norm(acc)
-        if norm > 0:
-            out[row] = acc / norm
-    return out
-
-
 def add_reference_cloud_constraints(
     problem: pyceres.Problem,
     reconstruction: pycolmap.Reconstruction,
@@ -659,9 +557,6 @@ def add_reference_cloud_constraints(
         "track": 0,
         "neighbors": 0,
         "roughness": 0,
-        "planarity": 0,
-        "viewing_angle": 0,
-        "subsampled": 0,
     }
 
     # Only points the solver actually moves are worth constraining. Asking the
@@ -703,25 +598,6 @@ def add_reference_cloud_constraints(
         smooth = cloud.roughness[safe_idx] <= options.max_roughness
         rejected["roughness"] = int((keep & ~smooth).sum())
         keep &= smooth
-
-    if options.min_planarity is not None:
-        flat_enough = cloud.planarity[safe_idx] >= options.min_planarity
-        rejected["planarity"] = int((keep & ~flat_enough).sum())
-        keep &= flat_enough
-
-    if options.max_normal_angle_deg is not None and keep.any():
-        view = _mean_viewing_directions(reconstruction, ids)
-        cos_angle = np.abs(np.einsum("mi,mi->m", view, cloud.normals[safe_idx]))
-        head_on = cos_angle >= np.cos(np.deg2rad(options.max_normal_angle_deg))
-        rejected["viewing_angle"] = int((keep & ~head_on).sum())
-        keep &= head_on
-
-    if options.max_points is not None and int(keep.sum()) > options.max_points:
-        chosen = np.flatnonzero(keep)
-        rng = np.random.default_rng(options.seed)
-        drop = rng.choice(chosen, chosen.size - options.max_points, replace=False)
-        rejected["subsampled"] = int(drop.size)
-        keep[drop] = False
 
     rows = np.flatnonzero(keep)
     if rows.size == 0:

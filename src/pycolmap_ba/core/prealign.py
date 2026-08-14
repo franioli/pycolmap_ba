@@ -13,21 +13,12 @@ the bundle. The stages mirror what one does by hand in CloudCompare:
 1. **Coarse** - put the two clouds on top of each other by centroid, the
    robust cousin of CloudCompare's bounding-box matching (a sparse SfM cloud
    always has stray points far outside the block, which move a bounding box a
-   long way but barely touch a centroid).
-
-   Matching *size* as well is off by default and should stay off unless the two
-   clouds genuinely cover the same ground. They usually do not - the reference
-   survey overruns the photogrammetric block, or is clipped inside it - and then
-   the ratio of their extents is not a scale error but a difference of footprint.
-   Measured on ENRICH nadir-2 against a clipped mesh, extent matching invented a
-   +39 % scale error where the truth was +0.1 %, and ICP could not undo it. If
-   the block's scale really is unknown, take it from camera priors
-   (`utils.align_to_positions`), not from the extents.
-2. **Global** (optional) - FPFH features plus RANSAC, for a block whose
-   *orientation* is also unknown. Only worth it when step 1 leaves a large
-   rotation, since a sparse SfM cloud and a dense LiDAR cloud have very
-   different sampling and their feature descriptors agree only loosely.
-3. **Fine** - ICP, coarse to fine over decreasing voxel sizes. Point-to-point
+   long way but barely touch a centroid). Scale starts at 1 here - if the
+   block's scale is genuinely unknown, take it from camera priors
+   (`utils.align_to_positions`) before calling this, not from cloud extents:
+   the reference survey rarely covers exactly the same ground as the block,
+   so an extent ratio is a footprint difference, not a scale error.
+2. **Fine** - ICP, coarse to fine over decreasing voxel sizes. Point-to-point
    with scaling first, because that is the only open3d estimator that recovers a
    similarity and the block's scale is usually wrong; then point-to-plane, which
    ignores scale but converges far more precisely on planar scenes.
@@ -175,10 +166,7 @@ def prealign_to_reference(
     trigger_rms: float = 0.5,
     voxel_sizes: tuple[float, ...] = (4.0, 2.0, 1.0, 0.5),
     with_scale: bool = True,
-    match_extent: bool = False,
-    global_registration: bool = False,
     min_track_length: int = 3,
-    seed: int = 0,
     verbose: bool = True,
 ) -> PrealignResult:
     """Register the block onto the reference cloud before the bundle sees it.
@@ -199,15 +187,7 @@ def prealign_to_reference(
             the accuracy wanted before handing over to the bundle.
         with_scale: Let ICP recover scale as well as pose. Needed whenever the
             block came from an uncontrolled SfM run, where scale is arbitrary.
-        match_extent: Also match the two clouds' RMS radius in the coarse stage.
-            **Only valid when they cover the same ground** - otherwise it reads
-            a difference of footprint as a scale error and hands ICP a much
-            worse starting point than it began with. See the module docstring.
-        global_registration: Run FPFH + RANSAC before ICP, for a block whose
-            orientation is unknown. Slow, and unreliable between clouds of very
-            different density - try without it first.
         min_track_length: Ignore tie points seen by fewer images.
-        seed: Seed for RANSAC, when `global_registration` is set.
         verbose: Print the stage table.
 
     Returns:
@@ -244,65 +224,23 @@ def prealign_to_reference(
     # the normals the constraint itself uses.
     target.normals = o3d.utility.Vector3dVector(cloud.normals)
 
-    # Stage 1: centroid, and optionally size. Coarse enough to make the ICP
-    # basin reachable without pretending to more accuracy than it has.
+    # Stage 1: centroid. Coarse enough to make the ICP basin reachable without
+    # pretending to more accuracy than it has - see the module docstring for
+    # why this does not also try to match cloud extent.
     source_centre, target_centre = xyz.mean(axis=0), cloud.points.mean(axis=0)
-    scale = 1.0
-    if match_extent:
-        source_radius = np.sqrt(np.mean(np.sum((xyz - source_centre) ** 2, axis=1)))
-        target_radius = np.sqrt(
-            np.mean(np.sum((cloud.points - target_centre) ** 2, axis=1))
-        )
-        scale = float(target_radius / source_radius)
     current = np.eye(4)
-    current[:3, :3] *= scale
-    current[:3, 3] = target_centre - scale * source_centre
+    current[:3, 3] = target_centre - source_centre
     result.stages.append({
-        "name": "centroid" + (" + radius" if match_extent else ""),
+        "name": "centroid",
         "voxel": float("nan"),
         "fitness": float("nan"),
         "inlier_rmse": float("nan"),
-        "scale": scale,
+        "scale": 1.0,
     })
 
     registration = o3d.pipelines.registration
-    coarse_voxel = voxel_sizes[0]
 
-    if global_registration:
-        o3d.utility.random.seed(seed)
-        source_down = source.transform(current.copy()).voxel_down_sample(coarse_voxel)
-        source.transform(np.linalg.inv(current))  # transform() mutates in place
-        target_down = target.voxel_down_sample(coarse_voxel)
-        radius = coarse_voxel * 5
-        params = o3d.geometry.KDTreeSearchParamHybrid(radius=radius, max_nn=100)
-        for pcd in (source_down, target_down):
-            pcd.estimate_normals(params)
-        features = [
-            registration.compute_fpfh_feature(pcd, params)
-            for pcd in (source_down, target_down)
-        ]
-        ransac = registration.registration_ransac_based_on_feature_matching(
-            source_down,
-            target_down,
-            features[0],
-            features[1],
-            True,
-            coarse_voxel * 1.5,
-            registration.TransformationEstimationPointToPoint(with_scale),
-            3,
-            [],
-            registration.RANSACConvergenceCriteria(100_000, 0.999),
-        )
-        current = ransac.transformation @ current
-        result.stages.append({
-            "name": "FPFH + RANSAC",
-            "voxel": coarse_voxel,
-            "fitness": ransac.fitness,
-            "inlier_rmse": ransac.inlier_rmse,
-            "scale": float(np.cbrt(np.linalg.det(current[:3, :3]))),
-        })
-
-    # Stage 3: ICP, coarse to fine. Point-to-point recovers scale, point-to-plane
+    # Stage 2: ICP, coarse to fine. Point-to-point recovers scale, point-to-plane
     # then polishes - it cannot change scale, but by that point scale is right
     # and its normal-direction objective converges much closer on planar scenes.
     for voxel in voxel_sizes:
