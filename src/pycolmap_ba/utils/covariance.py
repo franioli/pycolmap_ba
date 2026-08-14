@@ -1,4 +1,4 @@
-"""Backend: posterior covariances of an adjusted block.
+"""Helpers: posterior covariances of an adjusted block.
 
 Separate from `bundle` because this is a diagnostic on a solved problem rather
 than part of solving it, and it is the one step that is allowed to fail without

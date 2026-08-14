@@ -6,13 +6,14 @@ controlled georeferencing, GNSS-constrained adjustment, reference-cloud
 from `gcp`, `camera_pose` and `reference_cloud` to COLMAP's own Ceres problem
 before solving it.
 
-Deliberately just the one solve. The neighbouring modules hold the things that
-are not part of assembling and solving it:
+Deliberately just the one solve. The things that are not part of assembling
+and solving it live elsewhere:
 
-* `filtering`  - post-solve removal of unsupportable points
-* `covariance` - posterior covariances of the result
-* `prealign`   - getting the block into range before any of this
-* `cloud_bundle` - alternating solve / re-correspondence around this function
+* `cloud_bundle`     - alternating solve / re-correspondence around this
+  function, in this package
+* `utils.filtering`  - post-solve removal of unsupportable points
+* `utils.covariance` - posterior covariances of the result
+* `utils.prealign`   - getting the block into range before any of this
 
 Examples:
     Markers as control, plus camera position priors::
@@ -63,6 +64,8 @@ from typing import Any
 import numpy as np
 import pycolmap
 
+from ..utils.covariance import estimate_covariance
+from ..utils.filtering import FilterOptions, filter_reconstruction
 from .camera_pose import (
     CameraPoseConstraints,
     add_camera_pose_constraints,
@@ -73,8 +76,6 @@ from .cloud import (
     ReferenceCloudConstraints,
     add_reference_cloud_constraints,
 )
-from .covariance import estimate_covariance
-from .filtering import FilterOptions, filter_reconstruction
 from .gcp import MarkerConstraints, add_marker_constraints
 
 __all__ = [

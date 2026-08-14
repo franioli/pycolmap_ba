@@ -1,4 +1,4 @@
-"""Backend: post-solve removal of points the adjustment cannot support.
+"""Helpers: post-solve removal of points the adjustment cannot support.
 
 Separate from `bundle` because this is cleanup, not estimation: it runs after a
 solve, changes no parameter, and is equally useful after a triangulation or an

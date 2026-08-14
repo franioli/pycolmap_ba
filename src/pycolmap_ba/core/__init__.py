@@ -10,15 +10,21 @@ Constraints - extra residual blocks on COLMAP's own Ceres problem:
 * `cloud`        - LiDAR / TLS reference-surface constraints on the tie points
 * `common`       - the weighting convention every one of them shares
 
-Solving, and the steps around it:
+Solving:
 
 * `bundle`       - assemble and solve **one** adjustment
 * `cloud_bundle` - alternate solving with reference-cloud re-correspondence
-* `prealign`     - global ICP registration, to get the block in range first
-* `filtering`    - post-solve removal of unsupportable points
-* `covariance`   - posterior covariances of the result
+
+The steps around a solve - `utils.prealign` (global ICP registration, to get
+the block in range first), `utils.filtering` (post-solve removal of
+unsupportable points) and `utils.covariance` (posterior covariances of the
+result) - live in `utils` instead, since none of them touches a Ceres
+problem. Re-exported here for convenience.
 """
 
+from ..utils.covariance import estimate_covariance
+from ..utils.filtering import FilterOptions, filter_reconstruction
+from ..utils.prealign import PrealignResult, prealign_to_reference, residual_rms
 from .bundle import (
     BundleResult,
     SolverOptions,
@@ -38,10 +44,7 @@ from .cloud import (
 )
 from .cloud_bundle import run_cloud_constrained_bundle_adjustment
 from .common import cov_in_tie_units, covs_in_tie_units
-from .covariance import estimate_covariance
-from .filtering import FilterOptions, filter_reconstruction
 from .gcp import MarkerConstraints, add_marker_constraints
-from .prealign import PrealignResult, prealign_to_reference, residual_rms
 
 __all__ = [
     "BundleResult",

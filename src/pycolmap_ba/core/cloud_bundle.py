@@ -2,7 +2,8 @@
 
 Separate from `bundle` because this is an *iteration strategy* wrapped around
 the bundle, not a way of assembling one - the same ICP-style alternation that
-`prealign` uses to get the block into range, continued at bundle accuracy. It
+`utils.prealign` uses to get the block into range, continued at bundle
+accuracy. It
 calls `run_bundle_adjustment` once per pass and never touches a residual block
 itself.
 """

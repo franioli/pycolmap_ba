@@ -1,4 +1,4 @@
-"""Backend: bring a block within reach of the reference cloud before constraining.
+"""Helpers: bring a block within reach of the reference cloud before constraining.
 
 `run_cloud_constrained_bundle_adjustment` is a *local* refiner. Its
 correspondence search takes the nearest reference patch, so once the block is
@@ -38,7 +38,7 @@ import numpy as np
 import pycolmap
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
-    from .cloud import ReferenceCloud
+    from ..core.cloud import ReferenceCloud
 
 __all__ = ["PrealignResult", "prealign_to_reference", "residual_rms"]
 
