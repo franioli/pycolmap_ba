@@ -329,7 +329,7 @@ def main() -> None:
         max_dist_schedule=schedule,
         solver=solver,
         markers=markers,
-        filters=core.FilterOptions(),
+        filters=utils.FilterOptions(),
         tie_points_sigma_px=enrich_data.tie_points_sigma_px,
         max_passes=args.max_passes,
     )

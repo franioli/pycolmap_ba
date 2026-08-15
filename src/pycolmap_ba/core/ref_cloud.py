@@ -537,7 +537,7 @@ def add_reference_cloud_constraints(
     Correspondences are resolved once, here. They are *not* refreshed inside the
     solve: Ceres's trust region assumes a fixed cost function, so changing them
     between evaluations makes step quality meaningless. Refresh happens in the
-    outer loop instead (`bundle.run_cloud_constrained_bundle_adjustment`).
+    outer loop instead (`core.run_cloud_constrained_bundle_adjustment`).
 
     Args:
         problem: The Ceres problem from the *single* bundle adjuster.

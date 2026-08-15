@@ -38,7 +38,7 @@ import numpy as np
 import pycolmap
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
-    from ..core.cloud import ReferenceCloud
+    from ..core.ref_cloud import ReferenceCloud
 
 __all__ = ["PrealignResult", "prealign_to_reference", "residual_rms"]
 

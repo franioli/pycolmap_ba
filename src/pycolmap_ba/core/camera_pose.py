@@ -94,19 +94,15 @@ def add_camera_pose_constraints(
         Number of residual blocks added (one per registered image with a prior).
     """
     pos_cov = cov_in_tie_units(priors.sigma_m, tie_points_sigma_px, 3)
-    # pose_cov stays None for the position-only case, and doubles as the flag.
-    pose_cov = None
     if priors.sigma_rot_deg is not None:
         # AbsolutePosePriorCost's residual is [rotation(3, rad), position(3, m)],
-        # so the rotation sigma enters in radians.
+        # so the rotation sigma enters in radians. Its position component is on
+        # the raw translation t = -R @ C, not on the centre C, so an anisotropic
+        # sigma_m given in world axes must be rotated into that frame first:
+        # dt = -R @ dC  =>  Cov(t) = R @ Cov(C) @ R^T. Built per-image below,
+        # since each prior pose has its own rotation.
         rot_cov = cov_in_tie_units(
             np.deg2rad(priors.sigma_rot_deg), tie_points_sigma_px, 3
-        )
-        pose_cov = np.block(
-            [
-                [rot_cov, np.zeros((3, 3))],
-                [np.zeros((3, 3)), pos_cov],
-            ]
         )
     prior_poses = priors.cam_from_world or {}
     robust = (
@@ -117,7 +113,7 @@ def add_camera_pose_constraints(
 
     n_added = 0
     for image in reconstruction.images.values():
-        if pose_cov is not None:
+        if priors.sigma_rot_deg is not None:
             prior_pose = prior_poses.get(image.name)
             if prior_pose is None:
                 continue
@@ -126,6 +122,15 @@ def add_camera_pose_constraints(
                     "6-DoF pose priors assume one camera per frame; image "
                     f"{image.name!r} is not the frame reference sensor"
                 )
+            # Cov(t) = R @ Cov(C) @ R^T for this image's own prior rotation R
+            # (see note above pos_cov/rot_cov construction).
+            R = prior_pose.rotation.matrix()
+            pose_cov = np.block(
+                [
+                    [rot_cov, np.zeros((3, 3))],
+                    [np.zeros((3, 3)), R @ pos_cov @ R.T],
+                ]
+            )
             cost = cost_functions.AbsolutePosePriorCost(pose_cov, prior_pose)
         else:
             if image.name not in priors.positions:
@@ -133,9 +138,10 @@ def add_camera_pose_constraints(
             # AbsolutePosePositionPriorCost, NOT NormalPrior. COLMAP's pose
             # parameter block is rig_from_world = (quaternion, t), and the camera
             # centre is C = -R^T t. This cost's residual evaluates to
-            # R * (C_prior - C_est), so the sigma really is metres on the CENTRE.
-            # A NormalPrior on the same block would constrain t instead, which is
-            # a different quantity and silently wrong.
+            # C_prior - C_est directly in world axes, so the sigma really is
+            # metres on the CENTRE, in world axes. A NormalPrior on the same
+            # block would constrain t instead, which is a different quantity
+            # and silently wrong.
             cost = cost_functions.AbsolutePosePositionPriorCost(
                 pos_cov, np.asarray(priors.positions[image.name], dtype=float)
             )

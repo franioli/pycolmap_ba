@@ -70,7 +70,7 @@ from .camera_pose import (
     CameraPoseConstraints,
     add_camera_pose_constraints,
 )
-from .cloud import (
+from .ref_cloud import (
     CorrespondenceStats,
     ReferenceCloud,
     ReferenceCloudConstraints,

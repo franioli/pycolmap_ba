@@ -19,7 +19,7 @@ import numpy as np
 import pycolmap
 
 from .bundle import BundleResult, run_bundle_adjustment
-from .cloud import ReferenceCloud, ReferenceCloudConstraints
+from .ref_cloud import ReferenceCloud, ReferenceCloudConstraints
 
 __all__ = ["run_cloud_constrained_bundle_adjustment"]
 
@@ -112,8 +112,8 @@ def run_cloud_constrained_bundle_adjustment(
             if stats is not None
             else {}
         )
-        # A point whose target patch changed - or which entered or left the set -
-        # counts as changed. Comparing the assignment is a sharper convergence
+        # A point whose target patch changed - or which entered or left the set
+        # - counts as changed. Comparing the assignment is a sharper convergence
         # test than the cost, which keeps drifting long after it has settled.
         # Count *points*, not (point, patch) pairs: the symmetric difference of
         # the pairs double-counts every reassignment and can report over 100 %.
