@@ -82,7 +82,7 @@ def add_marker_constraints(
     markers: MarkerConstraints,
     tie_points_sigma_px: float,
     retained: list[Any],
-) -> tuple[dict[str, np.ndarray], int, int]:
+) -> tuple[dict[str, np.ndarray], list[Any], list[Any]]:
     """Add marker image residuals and world priors to an existing problem.
 
     Each marker becomes a 3-vector parameter block owned by this module, so the
@@ -100,8 +100,10 @@ def add_marker_constraints(
             reading freed memory.
 
     Returns:
-        `(marker_xyz, n_image_blocks, n_world_blocks)` where `marker_xyz` maps
-        marker name to the parameter block the solver will optimise.
+        `(marker_xyz, image_blocks, world_blocks)` where `marker_xyz` maps
+        marker name to the parameter block the solver will optimise, and the
+        two lists are the residual-block ids added, kept so the residuals of
+        each group can be evaluated after the solve.
     """
     image_cov = cov_in_tie_units(markers.sigma_px, tie_points_sigma_px, 2)
     world_cov = cov_in_tie_units(markers.sigma_m, tie_points_sigma_px, 3)
@@ -115,7 +117,7 @@ def add_marker_constraints(
         else None
     )
 
-    n_image = 0
+    image_blocks: list[Any] = []
     for obs in markers.observations.itertuples():
         image = by_name.get(obs.image_name)
         if image is None or obs.marker_name not in marker_xyz:
@@ -134,16 +136,17 @@ def add_marker_constraints(
         # For a single-camera rig cam_from_world == rig_from_world, and these are
         # live views into COLMAP's memory, so they are the same parameter blocks
         # COLMAP optimises - with the quaternion manifold already set.
-        problem.add_residual_block(
-            cost,
-            robust,
-            [
-                marker_xyz[obs.marker_name],
-                reconstruction.frames[image.frame_id].rig_from_world.params,
-                camera.params,
-            ],
+        image_blocks.append(
+            problem.add_residual_block(
+                cost,
+                robust,
+                [
+                    marker_xyz[obs.marker_name],
+                    reconstruction.frames[image.frame_id].rig_from_world.params,
+                    camera.params,
+                ],
+            )
         )
-        n_image += 1
 
     # Only control markers get a world constraint; the rest stay free and act as
     # check points.
@@ -152,7 +155,7 @@ def add_marker_constraints(
         if markers.control_names is not None
         else list(marker_xyz)
     )
-    n_world = 0
+    world_blocks: list[Any] = []
     for name in control:
         if name not in marker_xyz:
             continue
@@ -162,7 +165,6 @@ def add_marker_constraints(
         # serialises Ceres's multithreaded pass over the tie-point residuals.
         cost = pyceres.factors.NormalPrior(markers.xyz[name], world_cov)
         retained.append(cost)
-        problem.add_residual_block(cost, None, [marker_xyz[name]])
-        n_world += 1
+        world_blocks.append(problem.add_residual_block(cost, None, [marker_xyz[name]]))
 
-    return marker_xyz, n_image, n_world
+    return marker_xyz, image_blocks, world_blocks

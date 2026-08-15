@@ -74,7 +74,7 @@ def add_camera_pose_constraints(
     priors: CameraPoseConstraints,
     tie_points_sigma_px: float,
     retained: list[Any],
-) -> int:
+) -> list[Any]:
     """Constrain camera poses to prior positions, optionally with rotations.
 
     COLMAP ships a native position-prior bundle adjuster
@@ -91,7 +91,8 @@ def add_camera_pose_constraints(
         retained: Keep-alive list for the cost functions.
 
     Returns:
-        Number of residual blocks added (one per registered image with a prior).
+        The residual-block ids added, one per registered image with a prior,
+        kept so this group's residuals can be evaluated after the solve.
     """
     pos_cov = cov_in_tie_units(priors.sigma_m, tie_points_sigma_px, 3)
     if priors.sigma_rot_deg is not None:
@@ -111,7 +112,7 @@ def add_camera_pose_constraints(
         else None
     )
 
-    n_added = 0
+    residual_blocks: list[Any] = []
     for image in reconstruction.images.values():
         if priors.sigma_rot_deg is not None:
             prior_pose = prior_poses.get(image.name)
@@ -146,10 +147,11 @@ def add_camera_pose_constraints(
                 pos_cov, np.asarray(priors.positions[image.name], dtype=float)
             )
         retained.append(cost)
-        problem.add_residual_block(
-            cost,
-            robust,
-            [reconstruction.frames[image.frame_id].rig_from_world.params],
+        residual_blocks.append(
+            problem.add_residual_block(
+                cost,
+                robust,
+                [reconstruction.frames[image.frame_id].rig_from_world.params],
+            )
         )
-        n_added += 1
-    return n_added
+    return residual_blocks

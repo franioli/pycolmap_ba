@@ -19,7 +19,7 @@ The steps around a solve - `utils.prealign` (global ICP registration, to get
 the block in range first), `utils.filtering` (post-solve removal of
 unsupportable points) and `utils.covariance` (posterior covariances of the
 result) - live in `utils` instead, since none of them touches a Ceres
-problem. Re-exported here for convenience.
+problem. Not re-exported here: import them from `utils` directly.
 """
 
 from .bundle import (
@@ -31,7 +31,6 @@ from .bundle import (
     solve_to_convergence,
 )
 from .camera_pose import CameraPoseConstraints, add_camera_pose_constraints
-from .ref_cloud_iter_bundle import run_cloud_constrained_bundle_adjustment
 from .common import cov_in_tie_units, covs_in_tie_units
 from .gcp import MarkerConstraints, add_marker_constraints
 from .ref_cloud import (
@@ -42,10 +41,15 @@ from .ref_cloud import (
     add_reference_cloud_constraints,
     datum_information,
 )
+from .ref_cloud_iter_bundle import (
+    CloudAlignmentError,
+    run_cloud_constrained_bundle_adjustment,
+)
 
 __all__ = [
     "BundleResult",
     "CameraPoseConstraints",
+    "CloudAlignmentError",
     "CorrespondenceStats",
     "DatumInformation",
     "MarkerConstraints",

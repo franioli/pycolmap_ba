@@ -9,6 +9,13 @@ here rather than in `core` because none of them touches a Ceres problem;
 conceptually part of the bundle-adjustment workflow.
 """
 
+from .compatibility import (
+    CompatibilityOptions,
+    CompatibilityReport,
+    check_cloud_compatibility,
+    sparse_xyz,
+    surface_separation,
+)
 from .covariance import estimate_covariance
 from .filtering import FilterOptions, filter_reconstruction
 from .geometry import (
@@ -31,6 +38,8 @@ from .report import (
 )
 
 __all__ = [
+    "CompatibilityOptions",
+    "CompatibilityReport",
     "FilterOptions",
     "GroundTruth",
     "Perturbation",
@@ -41,6 +50,7 @@ __all__ = [
     "banner",
     "block_report",
     "camera_center_rmse",
+    "check_cloud_compatibility",
     "compare_to_reconstruction",
     "estimate_covariance",
     "export_reconstruction",
@@ -52,6 +62,8 @@ __all__ = [
     "rotation_error_deg",
     "save_point_cloud_as_ply",
     "save_points_as_ply",
+    "sparse_xyz",
     "stats",
+    "surface_separation",
     "umeyama",
 ]

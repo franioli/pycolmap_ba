@@ -21,7 +21,16 @@ Usage::
 
     python enrich/run_cloud_ba.py                     # datum test
     python enrich/run_cloud_ba.py --perturb-focal 2   # intrinsics test, +2 %
-    python enrich/run_cloud_ba.py --gcp-baseline      # the GCP bundle to beat
+    python enrich/run_cloud_ba.py --include-gcp        # the GCP bundle to beat
+    python enrich/run_cloud_ba.py --preset recover     # blind-recovery self-test:
+                                                        # 10 m / 5 deg / 200 ppm / 2%
+                                                        # perturbation, recovered via
+                                                        # the guard + pre-alignment
+                                                        # path alone
+    python enrich/run_cloud_ba.py --check-only         # compatibility check only,
+                                                        # no bundle - the diagnostic
+                                                        # to run on real, non-synthetic
+                                                        # data
 """
 
 from __future__ import annotations
@@ -55,12 +64,6 @@ NEIGHBORS = 20
 # leaves the block unable to pull itself in.
 MAX_DIST_M = 1.0
 MIN_TRACK_LENGTH = 3
-
-# Run a global ICP registration first if the block sits further than this from
-# the reference cloud, measured as a trimmed RMS. Below it, prealigning could
-# only make things worse: ICP optimises raw geometric distance, which is a
-# cruder objective than the bundle's.
-PREALIGN_TRIGGER_M = 0.5
 
 
 def build_reference_cloud(
@@ -111,26 +114,6 @@ def build_reference_cloud(
             f"planarity median {np.median(cloud.planarity):.2f}"
         )
     return cloud
-
-
-def report_datum(
-    reconstruction: pycolmap.Reconstruction,
-    cloud: core.ReferenceCloud,
-    options: core.ReferenceCloudConstraints,
-) -> None:
-    """Print which of the 7 datum degrees of freedom the cloud constrains."""
-    xyz = np.array([
-        p.xyz
-        for p in reconstruction.points3D.values()
-        if p.track.length() >= options.min_track_length
-    ])
-    idx, _ = cloud.query(xyz, options.max_dist)
-    matched = idx >= 0
-    if not matched.any():
-        print("datum: no correspondences, nothing to report")
-        return
-    info = core.datum_information(xyz[matched], cloud.covariances(idx[matched]))
-    print(info.summary(threshold=0.05))
 
 
 def export(
@@ -232,7 +215,39 @@ def main() -> None:
         help="write PLYs here for CloudCompare (reference cloud + sparse "
         "before/after, carrying the signed distance to the reference surface)",
     )
+    parser.add_argument(
+        "--preset",
+        choices=["recover"],
+        default=None,
+        help="apply a fixed perturbation preset instead of the individual "
+        "--perturb-* flags: 'recover' is the blind-recovery self-test (10 m "
+        "shift, 5 deg rotation, 200 ppm scale, 2%% focal) - overrides any "
+        "--perturb-* flags given alongside it",
+    )
+    parser.add_argument(
+        "--no-prealign",
+        action="store_true",
+        help="disable pre-alignment on a failed compatibility check (on_mismatch="
+        "'warn' instead of 'prealign') - reproduces the old oracle-gated "
+        "behaviour, where only a hand-sized gate schedule could recover a "
+        "misaligned block",
+    )
+    parser.add_argument(
+        "--check-only",
+        action="store_true",
+        help="run the compatibility check against the reference cloud and exit - "
+        "the diagnostic to run on real, non-synthetic data, where there is no "
+        "known perturbation to size a gate schedule from",
+    )
     args = parser.parse_args()
+
+    if args.preset == "recover":
+        args.perturb_shift = 10.0
+        args.perturb_rot = 5.0
+        args.perturb_scale = 200.0
+        args.perturb_focal = 2.0
+        if args.export is None:
+            args.export = FREE_PATH.parent
 
     truth_data = enrich_data.load(subblock="nadir-2", split_control_check=True)
     control = truth_data.control_names if args.include_gcp else []
@@ -262,13 +277,9 @@ def main() -> None:
 
     # Push the block off the cloud with a known 7-DoF similarity. The tie-point
     # network is blind to this (a similarity leaves every reprojection residual
-    # unchanged), so anything recovered is the reference cloud's doing.
-    # NOTE: hardcode values for dev to avoid cli.
-    args.perturb_shift = 10
-    args.perturb_rot = 5
-    args.perturb_scale = 200.0
-    args.perturb_focal = 2.0
-    args.export = FREE_PATH.parent
+    # unchanged), so anything recovered is the reference cloud's doing. A no-op
+    # `Perturbation()` (the default, no --perturb-* / --preset given) leaves the
+    # block exactly where it started - the mode to use on real data.
     perturb = utils.Perturbation(
         shift_m=args.perturb_shift,
         rot_deg=args.perturb_rot,
@@ -276,15 +287,26 @@ def main() -> None:
         focal_pct=args.perturb_focal,
         seed=0,
     )
-    # Keep the report: `reach` is the displacement at the block edge, and the
-    # first correspondence gate has to exceed it or every match is the wrong
-    # surface. That is what sizes the schedule below.
-    report = utils.perturb_reconstruction(rec, perturb)
+    # `report.reach`/`report.sim3d` are kept only as the final oracle-assertion
+    # self-test below - checking whether the *blind* path (guard + prealign,
+    # no knowledge of this perturbation) actually recovered it. Nothing in
+    # between here and there is allowed to read them.
+    perturb_report = utils.perturb_reconstruction(rec, perturb)
     if perturb:
-        print(report.summary())
+        print(perturb_report.summary())
 
     utils.block_report(rec)
     utils.accuracy_report(rec, {}, truth, "free network")
+
+    cloud = build_reference_cloud(rebuild=args.rebuild_cloud)
+
+    if args.check_only:
+        utils.banner("COMPATIBILITY CHECK ONLY")
+        check = utils.check_cloud_compatibility(
+            rec, cloud, utils.CompatibilityOptions(max_dist=MAX_DIST_M)
+        )
+        print(check.summary())
+        return
 
     solver = core.SolverOptions(
         refine_focal_length=args.refine_intrinsics,
@@ -292,35 +314,24 @@ def main() -> None:
         min_track_length=0,
         function_tolerance=1e-8,
     )
-
-    cloud = build_reference_cloud(rebuild=args.rebuild_cloud)
-    # The gate must start wider than the perturbation's reach, or the nearest
-    # patch is simply the wrong surface and no amount of iterating recovers it.
     options = core.ReferenceCloudConstraints(
-        max_dist=max(MAX_DIST_M, 2.0 * report.reach),
+        max_dist=MAX_DIST_M,
         min_track_length=MIN_TRACK_LENGTH,
         max_roughness=4 * CLOUD_NOISE_M,
         robust_loss_scale=2.0,
     )
 
-    # Coarse to fine: open wide enough to capture the initial misalignment, then
-    # tighten, or the wrong-surface matches the wide gate let in keep dragging
-    # the block. Beyond a few metres of reach this stops being a refinement
-    # problem and becomes a global registration one - see the note in the docs.
-    schedule = None
-    if report.reach > 0.5 * MAX_DIST_M:
-        schedule = list(
-            np.geomspace(options.max_dist, MAX_DIST_M, num=max(args.max_passes - 1, 2))
-        )
-        print(f"gate schedule: {[round(g, 2) for g in schedule]} m")
+    # Blind, fixed coarse-to-fine schedule - no longer sized from the known
+    # perturbation. Large misalignments are now the guard + pre-alignment's
+    # job (`on_mismatch="prealign"` below), not this schedule's; it only has
+    # to cover ordinary refinement, hence a fixed multiple of the final gate.
+    schedule = list(np.geomspace(4.0 * MAX_DIST_M, MAX_DIST_M, num=3))
+    print(f"gate schedule: {[round(g, 2) for g in schedule]} m")
 
     if args.export:
         utils.save_points_as_ply(cloud.points, args.export / "reference_cloud.ply")
         print(f"  wrote reference_cloud.ply ({len(cloud):,} points)")
         export(rec, cloud, options, args.export, "before")
-
-    utils.banner("DATUM BEFORE")
-    report_datum(rec, cloud, options)
 
     result = core.run_cloud_constrained_bundle_adjustment(
         rec,
@@ -332,31 +343,38 @@ def main() -> None:
         filters=utils.FilterOptions(),
         tie_points_sigma_px=enrich_data.tie_points_sigma_px,
         max_passes=args.max_passes,
+        on_mismatch="warn" if args.no_prealign else "prealign",
     )
+    if result.compatibility is not None:
+        print(f"\n{result.compatibility.summary()}")
+    if result.prealign is not None:
+        print(result.prealign.summary())
 
-    utils.banner("DATUM AFTER")
-    report_datum(rec, cloud, options)
-
-    utils.block_report(rec)
+    utils.block_report(
+        rec, result, cloud=cloud, solver=solver, label="reference-cloud bundle"
+    )
     utils.accuracy_report(rec, result.marker_xyz, truth, "reference-cloud bundle")
 
     if args.export:
         export(rec, cloud, options, args.export, "after")
 
-    print("\npasses:")
-    for record in result.passes:
+    if perturb:
+        # Self-test: did the blind path (guard + prealign inside the BA, no
+        # oracle) actually undo a perturbation whose reach is known here only
+        # because this is a synthetic test - never used to size anything above.
+        rmse = utils.camera_center_rmse(rec, truth.camera_xyz)
+        recovered = rmse < 0.10  # ~ back to the few-cm baseline a GCP bundle gets
+        prealigned = result.prealign is not None and result.prealign.sim3d is not None
         print(
-            f"  {record['pass']}: gate {record['max_dist']:.2f} m, "
-            f"{record['n_used']:,} constrained, "
-            f"{record['changed_fraction']:.1%} changed, "
-            f"median to plane {record['median_surface_distance']:.3f} m, "
-            f"{record['seconds']:.1f} s"
+            f"\nself-test: known perturbation reach {perturb_report.reach:.2f} m, "
+            f"prealign triggered: {prealigned} -> final camera centre RMSE "
+            f"{rmse:.3f} m ({'RECOVERED' if recovered else 'NOT RECOVERED'})"
         )
-
-    print(
-        f"\nfinal camera centre RMSE to truth: "
-        f"{utils.camera_center_rmse(rec, truth.camera_xyz):.3f} m"
-    )
+    else:
+        print(
+            f"\nfinal camera centre RMSE to truth: "
+            f"{utils.camera_center_rmse(rec, truth.camera_xyz):.3f} m"
+        )
 
 
 if __name__ == "__main__":

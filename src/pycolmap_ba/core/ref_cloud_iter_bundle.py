@@ -11,17 +11,62 @@ itself.
 from __future__ import annotations
 
 import time
+import warnings
 from collections.abc import Sequence
 from dataclasses import replace
-from typing import Any
+from typing import Any, Literal
 
 import numpy as np
 import pycolmap
 
+from ..utils.compatibility import (
+    CompatibilityOptions,
+    CompatibilityReport,
+    check_cloud_compatibility,
+)
+from ..utils.prealign import PrealignResult, prealign_to_reference
 from .bundle import BundleResult, run_bundle_adjustment
 from .ref_cloud import ReferenceCloud, ReferenceCloudConstraints
 
-__all__ = ["run_cloud_constrained_bundle_adjustment"]
+__all__ = ["CloudAlignmentError", "run_cloud_constrained_bundle_adjustment"]
+
+
+class CloudAlignmentError(RuntimeError):
+    """The block cannot be constrained to the reference cloud where it sits.
+
+    Raised before anything is solved, and after any pre-alignment has been
+    rolled back, so the reconstruction is left exactly as it was handed over.
+
+    Attributes:
+        check_before: The compatibility check that failed.
+        prealign: What pre-alignment was attempted, None if it was not tried.
+        check_after: The check that still failed afterwards.
+    """
+
+    def __init__(
+        self,
+        check_before: CompatibilityReport,
+        prealign: PrealignResult | None = None,
+        check_after: CompatibilityReport | None = None,
+    ) -> None:
+        self.check_before = check_before
+        self.prealign = prealign
+        self.check_after = check_after
+        parts = [
+            "block cannot be constrained to the reference cloud",
+            check_before.summary(),
+        ]
+        if prealign is not None:
+            parts.append(prealign.summary())
+        if check_after is not None:
+            parts.append(check_after.summary())
+        parts.append(
+            "ICP could not recover it, so this is a global registration problem, "
+            "not an alignment one: try feature-based global registration "
+            "(open3d FPFH features + RANSAC) to find a coarse pose first, then "
+            "constrain."
+        )
+        super().__init__("\n".join(parts))
 
 
 def run_cloud_constrained_bundle_adjustment(
@@ -32,6 +77,9 @@ def run_cloud_constrained_bundle_adjustment(
     max_passes: int = 5,
     max_dist_schedule: Sequence[float] | None = None,
     min_changed_fraction: float = 0.01,
+    on_mismatch: Literal["prealign", "raise", "warn", "ignore"] = "prealign",
+    compatibility: CompatibilityOptions | None = None,
+    prealign_options: dict[str, Any] | None = None,
     verbose: bool = True,
     **kwargs: Any,
 ) -> BundleResult:
@@ -64,6 +112,15 @@ def run_cloud_constrained_bundle_adjustment(
         min_changed_fraction: Stop once fewer than this fraction of the
             correspondences changed target between passes. The natural
             convergence test: the correspondence *set*, not the cost.
+        on_mismatch: What to do when the pre-flight compatibility check fails.
+            `"prealign"` (default) runs global ICP registration and re-checks;
+            `"raise"` fails immediately; `"warn"` only warns, reproducing the
+            old oracle-gated behaviour; `"ignore"` skips the check entirely.
+        compatibility: Thresholds for the pre-flight check. None builds
+            `CompatibilityOptions(max_dist=first_gate)`, the first entry of
+            `max_dist_schedule` (or `reference_options.max_dist`).
+        prealign_options: Extra keyword arguments forwarded to
+            `prealign_to_reference` when `on_mismatch="prealign"` triggers.
         verbose: Print a per-pass line.
         **kwargs: Forwarded to `run_bundle_adjustment` (`solver`, `markers`,
             `camera_poses`, `filters`, `tie_points_sigma_px`, `covariance`, ...).
@@ -82,6 +139,46 @@ def run_cloud_constrained_bundle_adjustment(
         raise ValueError("max_dist_schedule must not be empty")
 
     base = reference_options or ReferenceCloudConstraints()
+    compatibility_report: CompatibilityReport | None = None
+    prealign_result: PrealignResult | None = None
+
+    if on_mismatch != "ignore":
+        # The check's max_dist must equal the *first* gate of the schedule
+        # about to run, not the final one - the final, tightest gate would
+        # fail every legitimate coarse-to-fine run.
+        first_gate = (
+            max_dist_schedule[0] if max_dist_schedule is not None else base.max_dist
+        )
+        opts = compatibility or CompatibilityOptions(max_dist=first_gate)
+        before = check_cloud_compatibility(reconstruction, reference_cloud, opts)
+        compatibility_report = before
+        if not before.passed:
+            warnings.warn(
+                f"block incompatible with reference cloud: {before.summary()}",
+                stacklevel=2,
+            )
+            if on_mismatch == "raise":
+                raise CloudAlignmentError(before)
+            if on_mismatch == "prealign":
+                # trigger_rms=0.0: the check already failed, so the internal
+                # skip-if-already-close logic must not veto this call.
+                pre = prealign_to_reference(
+                    reconstruction,
+                    reference_cloud,
+                    trigger_rms=0.0,
+                    verbose=verbose,
+                    **(prealign_options or {}),
+                )
+                prealign_result = pre
+                after = check_cloud_compatibility(reconstruction, reference_cloud, opts)
+                compatibility_report = after
+                if not after.passed:
+                    if pre.sim3d is not None:
+                        # Rollback: a raise must leave the reconstruction
+                        # bit-identical to before the guard ran.
+                        reconstruction.transform(pre.sim3d.inverse())
+                    raise CloudAlignmentError(before, pre, after)
+
     records: list[dict[str, Any]] = []
     previous: dict[int, int] = {}
     result: BundleResult | None = None
@@ -156,4 +253,6 @@ def run_cloud_constrained_bundle_adjustment(
 
     assert result is not None  # max_passes >= 1 guarantees at least one solve
     result.passes = records
+    result.compatibility = compatibility_report
+    result.prealign = prealign_result
     return result

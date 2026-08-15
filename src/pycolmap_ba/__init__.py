@@ -20,7 +20,7 @@ from . import core, frontend, utils
 from .core import (
     BundleResult,
     CameraPoseConstraints,
-    FilterOptions,
+    CloudAlignmentError,
     MarkerConstraints,
     ReferenceCloud,
     ReferenceCloudConstraints,
@@ -28,11 +28,19 @@ from .core import (
     run_bundle_adjustment,
     run_cloud_constrained_bundle_adjustment,
 )
-from .utils import GroundTruth, accuracy_report, banner, block_report
+from .utils import (
+    FilterOptions,
+    GroundTruth,
+    accuracy_report,
+    banner,
+    block_report,
+    check_cloud_compatibility,
+)
 
 __all__ = [
     "BundleResult",
     "CameraPoseConstraints",
+    "CloudAlignmentError",
     "FilterOptions",
     "GroundTruth",
     "MarkerConstraints",
@@ -42,6 +50,7 @@ __all__ = [
     "accuracy_report",
     "banner",
     "block_report",
+    "check_cloud_compatibility",
     "core",
     "frontend",
     "run_bundle_adjustment",

@@ -113,7 +113,12 @@ class ReferenceCloud:
         eigenvalues: `(N, 3)` neighbourhood covariance eigenvalues, **ascending**
             (so `[:, 0]` is across the surface and `[:, 2]` along it).
         eigenvectors: `(N, 3, 3)` matching eigenvectors as columns.
-        counts: `(N,)` number of neighbours each patch was built from.
+        counts: `(N,)` neighbours of each patch lying within `patch_radius` -
+            the *support* of the patch, not the `k + 1` it was built from, which
+            is a constant and says nothing. See `from_points`.
+        patch_radius: The cloud's nominal patch radius, metres: the median over
+            all points of the distance to their k-th neighbour. The radius
+            `counts` is measured in.
         sigma_ref: Noise floor, metres - the 1-sigma accuracy of the reference
             cloud itself. Sets how stiff the constraint is across the surface,
             and so how hard the tie points are pulled onto it.
@@ -129,6 +134,7 @@ class ReferenceCloud:
     eigenvalues: np.ndarray
     eigenvectors: np.ndarray
     counts: np.ndarray
+    patch_radius: float = 0.0
     sigma_ref: float = 0.02
     sigma_slack: float = 10.0
     _index: Any = field(default=None, repr=False, compare=False)
@@ -206,6 +212,17 @@ class ReferenceCloud:
     ) -> ReferenceCloud:
         """Build the local surface distributions of a reference cloud.
 
+        Each patch is fitted to the `k + 1` nearest neighbours, which is a
+        stable plane fit everywhere. Its *support* is measured separately, as
+        the number of neighbours inside the cloud's nominal patch radius (the
+        median k-th-neighbour distance): interior points hold about `k + 1`,
+        a point on a straight boundary about half that, one in a corner about a
+        quarter, and one in a genuinely sparse region fewer still. That count -
+        not the constant `k + 1` - is what
+        `ReferenceCloudConstraints.min_neighbors` gates on, so patches on the
+        ragged edge of the survey, where the neighbourhood is one-sided and the
+        fitted plane extrapolates beyond the data, can be rejected.
+
         Args:
             points: `(N, 3)` reference coordinates, metres.
             k: Neighbours per patch. Large enough to be a stable plane fit,
@@ -239,13 +256,15 @@ class ReferenceCloud:
         eigenvalues = np.empty((n, 3))
         eigenvectors = np.empty((n, 3, 3))
         counts = np.empty(n, dtype=np.int64)
+        radii = np.empty(n)
 
         # +1 because a point is its own nearest neighbour, and it belongs in its
         # own patch.
         for start in range(0, n, _CHUNK):
             block = pts[start : start + _CHUNK]
             query = o3d.core.Tensor(np.ascontiguousarray(block))
-            idx = index.knn_search(query, k + 1)[0].numpy()
+            found, squared = index.knn_search(query, k + 1)
+            idx = found.numpy()
             # hybrid_search pads short neighbourhoods with -1; knn_search
             # cannot here, since n > k is already guaranteed above, but the
             # rest of the loop stays general rather than assuming that.
@@ -268,7 +287,17 @@ class ReferenceCloud:
             mu[start:stop] = centre
             eigenvalues[start:stop] = np.maximum(val, 0.0)
             eigenvectors[start:stop] = vec
-            counts[start:stop] = cnt
+            radii[start:stop] = np.sqrt(np.abs(squared.numpy()).max(axis=1))
+
+        # The support pass. One global radius, not a per-point one: the question
+        # is how this patch's neighbourhood compares with the cloud's own
+        # sampling, and a per-point radius would answer it with itself.
+        patch_radius = float(np.median(radii))
+        for start in range(0, n, _CHUNK):
+            block = pts[start : start + _CHUNK]
+            query = o3d.core.Tensor(np.ascontiguousarray(block))
+            found = index.hybrid_search(query, patch_radius, k + 1)[2].numpy()
+            counts[start : start + block.shape[0]] = found.reshape(-1)
 
         return cls(
             points=pts,
@@ -276,6 +305,7 @@ class ReferenceCloud:
             eigenvalues=eigenvalues,
             eigenvectors=eigenvectors,
             counts=counts,
+            patch_radius=patch_radius,
             sigma_ref=sigma_ref,
             sigma_slack=sigma_slack,
             _index=index,
@@ -304,6 +334,32 @@ class ReferenceCloud:
         dist = np.where(idx >= 0, np.sqrt(np.abs(d2.numpy().reshape(-1))), np.inf)
         return idx, dist
 
+    def nearest(self, points: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """Nearest patch of each query point, ungated.
+
+        The counterpart of `query` for *measuring* rather than corresponding:
+        every point gets an answer, however far away it is. Only useful where
+        the query set has already been restricted to points the cloud can
+        plausibly support - see `utils.check_cloud_compatibility`, which does
+        exactly that before calling this.
+
+        Args:
+            points: `(M, 3)` query coordinates.
+
+        Returns:
+            `(idx, dist)`, both `(M,)`, always valid.
+        """
+        import open3d as o3d
+
+        query = o3d.core.Tensor(
+            np.ascontiguousarray(np.asarray(points, dtype=np.float64))
+        )
+        idx, d2 = self._index.knn_search(query, 1)
+        return (
+            idx.numpy().reshape(-1),
+            np.sqrt(np.abs(d2.numpy().reshape(-1))),
+        )
+
 
 @dataclass
 class ReferenceCloudConstraints:
@@ -320,8 +376,14 @@ class ReferenceCloudConstraints:
             tight in the first outer pass and the block can never pull itself in.
         min_track_length: Skip points seen by fewer images. Short tracks are
             poorly triangulated and would import their own error into the datum.
-        min_neighbors: Skip reference patches built from fewer neighbours - the
-            covariance of a sparse patch is meaningless.
+        min_neighbors: Skip reference patches supported by fewer neighbours
+            inside the cloud's own patch radius (`ReferenceCloud.counts`). This
+            is a *density and one-sidedness* test, not a count of what the patch
+            was fitted to: a patch on the ragged edge of the survey keeps its
+            `k + 1` nearest neighbours but they all lie to one side, and its
+            plane extrapolates off the data. Roughly `k / 2` on a straight
+            boundary and `k / 4` in a corner, so the gate is set relative to the
+            `k` the cloud was built with.
         max_roughness: Optional cap on the RMS deviation from the local plane,
             metres. The main clutter filter: a facade or a road is millimetres
             rough, vegetation is decimetres. A few times `sigma_ref` is a good
@@ -526,7 +588,7 @@ def add_reference_cloud_constraints(
     options: ReferenceCloudConstraints,
     tie_points_sigma_px: float,
     retained: list[Any],
-) -> tuple[int, CorrespondenceStats]:
+) -> tuple[list[Any], CorrespondenceStats]:
     """Pull the sparse tie points onto the reference surface.
 
     One `NormalPrior` per surviving tie point, on the `Point3D.xyz` parameter
@@ -550,7 +612,9 @@ def add_reference_cloud_constraints(
             memory.
 
     Returns:
-        `(n_blocks_added, stats)`.
+        `(residual_blocks, stats)`. The block ids are in the same order as
+        `stats.point3D_ids`, which is what lets the report evaluate the
+        residuals of this group afterwards and attribute them to points.
     """
     rejected = {
         "no_match": 0,
@@ -580,7 +644,7 @@ def add_reference_cloud_constraints(
 
     stats = CorrespondenceStats(n_candidates=len(ids), rejected=rejected)
     if not ids:
-        return 0, stats
+        return [], stats
 
     xyz = np.array([b for b in blocks], dtype=np.float64)
     ref_idx, dist = cloud.query(xyz, options.max_dist)
@@ -601,7 +665,7 @@ def add_reference_cloud_constraints(
 
     rows = np.flatnonzero(keep)
     if rows.size == 0:
-        return 0, stats
+        return [], stats
 
     matched = ref_idx[rows]
     # Scale into tie-point sigma units: the whole objective is multiplied by
@@ -614,10 +678,11 @@ def add_reference_cloud_constraints(
         else None
     )
 
+    residual_blocks = []
     for row, mean, cov in zip(rows, means, covs, strict=True):
         cost = pyceres.factors.NormalPrior(mean, cov)
         retained.append(cost)
-        problem.add_residual_block(cost, robust, [blocks[row]])
+        residual_blocks.append(problem.add_residual_block(cost, robust, [blocks[row]]))
 
     stats.n_used = int(rows.size)
     stats.point3D_ids = np.asarray([ids[r] for r in rows], dtype=np.int64)
@@ -626,4 +691,4 @@ def add_reference_cloud_constraints(
     stats.surface_distances = np.abs(
         np.einsum("mi,mi->m", xyz[rows] - means, cloud.normals[matched])
     )
-    return stats.n_used, stats
+    return residual_blocks, stats

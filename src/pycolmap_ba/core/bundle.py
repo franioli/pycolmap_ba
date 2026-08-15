@@ -62,6 +62,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
+import pyceres
 import pycolmap
 
 from ..utils.covariance import estimate_covariance
@@ -147,6 +148,20 @@ class SolverOptions:
 class BundleResult:
     """Outcome of `run_bundle_adjustment`.
 
+    Carries the solved Ceres problem itself, not just numbers taken off it, so
+    the residuals can be evaluated on demand - see `residuals`. That makes this
+    object own two lifetimes:
+
+    * `retained` holds the cost functions, because pyceres does not take
+      ownership of them and Ceres reads freed memory once they are collected.
+      They must outlive `problem`, which is why they sit on the same object.
+    * `problem` points at COLMAP's own parameter blocks, which the
+      *reconstruction* owns. Deleting a Point3D therefore leaves dangling
+      pointers behind, so post-solve filtering prunes `residual_blocks` to the
+      blocks that survived it. Evaluate through `residuals`, never by asking the
+      problem for all of its blocks: COLMAP's tie-point blocks for deleted
+      points stay in there and cannot be identified from here.
+
     Attributes:
         reconstruction: The adjusted reconstruction (mutated in place).
         marker_xyz: Adjusted marker coordinates, empty if no markers were used.
@@ -157,7 +172,8 @@ class BundleResult:
         usable: Whether Ceres considers the solution usable. A solve can stop on
             the iteration cap - not converged - and still be perfectly usable.
         n_blocks: Residual-block counts by kind - `tie_points`, `marker_image`,
-            `marker_world`, `camera_pose`, `reference_cloud`.
+            `marker_world`, `camera_pose`, `reference_cloud` - as they were
+            *solved*, before any filtering.
         n_filtered: Observations removed by post-solve filtering.
         covariance: `pycolmap.BACovariance` when `covariance=True` was requested
             and the estimation succeeded, else None.
@@ -165,6 +181,16 @@ class BundleResult:
             None if no reference cloud was used.
         passes: Per-pass records from
             `run_cloud_constrained_bundle_adjustment`, empty for a single solve.
+        problem: The solved `pyceres.Problem`.
+        residual_blocks: Residual-block ids by the same kinds as `n_blocks`,
+            minus any pruned by filtering. Tie points are absent: COLMAP adds
+            them itself and never hands back their ids.
+        retained: Keep-alive list for the cost functions.
+        gauge: The `pycolmap.BundleAdjustmentGauge` used, None for a network
+            whose datum came from the constraints instead.
+        compatibility: Pre-flight check against the reference cloud, when
+            `run_cloud_constrained_bundle_adjustment` ran one.
+        prealign: What the pre-alignment did, if the guard had to invoke it.
     """
 
     reconstruction: pycolmap.Reconstruction
@@ -177,6 +203,63 @@ class BundleResult:
     covariance: Any = None
     correspondences: CorrespondenceStats | None = None
     passes: list[dict[str, Any]] = field(default_factory=list)
+    problem: pyceres.Problem | None = None
+    residual_blocks: dict[str, list[Any]] = field(default_factory=dict)
+    retained: list[Any] = field(default_factory=list, repr=False)
+    gauge: Any = None
+    compatibility: Any = None
+    prealign: Any = None
+
+    def residuals(self, group: str, *, apply_loss: bool = False) -> np.ndarray:
+        """Whitened residuals of one constraint group, one row per block.
+
+        These are Ceres's own residuals, so they are whitened in the units the
+        problem was assembled in: `tie_points_sigma_px` times the properly
+        whitened residual, since every sigma was divided by that (see
+        `core.common`). Divide by it to read them as sigmas.
+
+        Args:
+            group: A key of `residual_blocks`.
+            apply_loss: Apply the robust loss. Ceres's correction makes
+                `||r_loss||^2 = rho'(s) s` for a loss with `rho'' <= 0` (Cauchy
+                among them), *not* `rho(s)`: the ratio to the uncorrected
+                residual is the IRLS weight, which is what `loss_weights`
+                returns. See `ceres::Corrector` and Triggs et al., *Bundle
+                Adjustment - A Modern Synthesis*, 1999, section 4.3.
+
+        Returns:
+            `(n_blocks, residual_dim)`, empty when the group has no blocks or
+            the problem is gone.
+        """
+        blocks = self.residual_blocks.get(group) or []
+        if self.problem is None or not blocks:
+            return np.empty((0, 0))
+        options = pyceres.EvaluateOptions()
+        options.apply_loss_function = apply_loss
+        options.set_residual_blocks(blocks)
+        values = np.asarray(self.problem.evaluate_residuals(options), dtype=float)
+        return values.reshape(len(blocks), -1)
+
+    def loss_weights(self, group: str) -> np.ndarray:
+        """Per-block robust weight the loss applied, `1.0` where it did nothing.
+
+        `kappa_j = ||r_j^loss||^2 / ||r_j||^2 = rho'(s_j)`, so 1 means the block
+        was taken at full weight and 0.1 means the solver kept a tenth of it.
+        The distribution is the honest reading of how much of the data the
+        robustifier is actually discarding.
+
+        Args:
+            group: A key of `residual_blocks`.
+
+        Returns:
+            `(n_blocks,)`, empty when the group has no blocks.
+        """
+        plain = self.residuals(group)
+        if plain.size == 0:
+            return np.empty(0)
+        squared = (plain**2).sum(axis=1)
+        robust = (self.residuals(group, apply_loss=True) ** 2).sum(axis=1)
+        return np.where(squared > 0, robust / np.maximum(squared, np.finfo(float).tiny), 1.0)
 
 
 def build_options(solver: SolverOptions) -> pycolmap.BundleAdjustmentOptions:
@@ -384,44 +467,53 @@ def run_bundle_adjustment(
         options, config, reconstruction
     )
     problem = bundle_adjuster.problem
-    n_blocks = {
-        "tie_points": problem.num_residual_blocks(),
-        "marker_image": 0,
-        "marker_world": 0,
-        "camera_pose": 0,
-        "reference_cloud": 0,
+    n_tie_points = problem.num_residual_blocks()
+    residual_blocks: dict[str, list[Any]] = {
+        "marker_image": [],
+        "marker_world": [],
+        "camera_pose": [],
+        "reference_cloud": [],
     }
     correspondences: CorrespondenceStats | None = None
 
     # pyceres does not take ownership of cost functions: without this list they
-    # are garbage collected while Ceres still holds the pointers.
+    # are garbage collected while Ceres still holds the pointers. It outlives
+    # this function on the returned BundleResult, which keeps `problem`
+    # evaluable afterwards.
     retained: list[Any] = []
     marker_xyz: dict[str, np.ndarray] = {}
 
     if markers is not None:
-        marker_xyz, n_image, n_world = add_marker_constraints(
+        (
+            marker_xyz,
+            residual_blocks["marker_image"],
+            residual_blocks["marker_world"],
+        ) = add_marker_constraints(
             problem, reconstruction, markers, tie_points_sigma_px, retained
         )
-        n_blocks["marker_image"] = n_image
-        n_blocks["marker_world"] = n_world
 
     if camera_poses is not None:
-        n_blocks["camera_pose"] = add_camera_pose_constraints(
+        residual_blocks["camera_pose"] = add_camera_pose_constraints(
             problem, reconstruction, camera_poses, tie_points_sigma_px, retained
         )
 
     if reference_cloud is not None:
-        n_blocks["reference_cloud"], correspondences = add_reference_cloud_constraints(
-            problem,
-            reconstruction,
-            reference_cloud,
-            reference_options or ReferenceCloudConstraints(),
-            tie_points_sigma_px,
-            retained,
+        residual_blocks["reference_cloud"], correspondences = (
+            add_reference_cloud_constraints(
+                problem,
+                reconstruction,
+                reference_cloud,
+                reference_options or ReferenceCloudConstraints(),
+                tie_points_sigma_px,
+                retained,
+            )
         )
         if verbose:
             print(f"  {correspondences.summary()}")
 
+    n_blocks = {"tie_points": n_tie_points} | {
+        kind: len(blocks) for kind, blocks in residual_blocks.items()
+    }
     expected = sum(n_blocks.values())
     assert problem.num_residual_blocks() == expected, (
         f"{problem.num_residual_blocks()} residual blocks, expected {expected} - "
@@ -454,6 +546,22 @@ def run_bundle_adjustment(
     n_filtered = 0
     if filters is not None:
         n_filtered = filter_reconstruction(reconstruction, filters, verbose)
+        # Filtering deletes Point3D entries, and the reference-cloud blocks hold
+        # raw pointers into them. Drop the ones whose point is gone or the
+        # problem would evaluate freed memory - silently, with plausible
+        # numbers, which is the worst kind of wrong.
+        if correspondences is not None and n_filtered:
+            alive = [
+                pid in reconstruction.points3D
+                for pid in correspondences.point3D_ids.tolist()
+            ]
+            residual_blocks["reference_cloud"] = [
+                block
+                for block, keep in zip(
+                    residual_blocks["reference_cloud"], alive, strict=True
+                )
+                if keep
+            ]
 
     return BundleResult(
         reconstruction=reconstruction,
@@ -465,4 +573,8 @@ def run_bundle_adjustment(
         n_filtered=n_filtered,
         covariance=ba_covariance,
         correspondences=correspondences,
+        problem=problem,
+        residual_blocks=residual_blocks,
+        retained=retained,
+        gauge=gauge,
     )
