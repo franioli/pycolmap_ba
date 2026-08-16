@@ -173,15 +173,15 @@ def main() -> None:
     """Run the experiment selected on the command line."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
+        "--refine-intrinsics",
+        action="store_true",
+        help="let the bundle refine focal length and distortion",
+    )
+    parser.add_argument(
         "--perturb-focal",
         type=float,
         default=0.0,
         help="scale the focal length by this %% before adjusting",
-    )
-    parser.add_argument(
-        "--refine-intrinsics",
-        action="store_true",
-        help="let the bundle refine focal length and distortion",
     )
     parser.add_argument(
         "--include-gcp",
@@ -241,6 +241,9 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    args.preset = "recover"  # --- IGNORE ---
+    args.refine_intrinsics = True  # --- IGNORE ---
+
     if args.preset == "recover":
         args.perturb_shift = 10.0
         args.perturb_rot = 5.0
@@ -296,7 +299,9 @@ def main() -> None:
         print(perturb_report.summary())
 
     utils.block_report(rec)
-    utils.accuracy_report(rec, {}, truth, "free network")
+    utils.accuracy_report(
+        reconstruction=rec, marker_xyz=None, truth=truth, label="free network"
+    )
 
     cloud = build_reference_cloud(rebuild=args.rebuild_cloud)
 

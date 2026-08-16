@@ -152,9 +152,9 @@ def _triangulation_angles_deg(reconstruction: pycolmap.Reconstruction) -> np.nda
         elements = point.track.elements
         if len(elements) < 2:
             continue
-        rays = np.array(
-            [centers[e.image_id] - point.xyz for e in elements if e.image_id in centers]
-        )
+        rays = np.array([
+            centers[e.image_id] - point.xyz for e in elements if e.image_id in centers
+        ])
         if len(rays) < 2:
             continue
         norm = np.maximum(
@@ -168,37 +168,45 @@ def _triangulation_angles_deg(reconstruction: pycolmap.Reconstruction) -> np.nda
 
 
 def _free_camera_param_count(
-    reconstruction: pycolmap.Reconstruction, solver: SolverOptions | None
+    reconstruction: pycolmap.Reconstruction,
+    result: BundleResult | None,
+    solver: SolverOptions | None,
 ) -> int:
-    """Number of intrinsics parameters actually left free by `solver`.
+    """Number of intrinsics parameters actually left free.
 
-    None (no solver given) falls back to "every parameter free", the same
+    Prefers `result.options` - the `pycolmap.BundleAdjustmentOptions` that was
+    actually solved with - over `solver`, since `SolverOptions.extra` can
+    override a refine_* flag after `solver` was built. Falling back to neither
+    (no result and no solver given) assumes "every parameter free", the same
     assumption the old, buggy redundancy formula made unconditionally - kept
     here only as the least-wrong default when the caller cannot say, and
     printed with a caveat by the caller.
 
     Args:
         reconstruction: Source of the cameras.
-        solver: The settings the bundle was run with, or None.
+        result: The solved `BundleResult`, if available.
+        solver: The settings the bundle was run with, if `result` isn't.
 
     Returns:
         Total free intrinsics parameters, summed over all cameras.
     """
-    if solver is None:
+    result_options = result.options if result is not None else None
+    source = result_options if result_options is not None else solver
+    if source is None:
         return sum(len(camera.params) for camera in reconstruction.cameras.values())
     if not (
-        solver.refine_focal_length
-        or solver.refine_principal_point
-        or solver.refine_extra_params
+        source.refine_focal_length
+        or source.refine_principal_point
+        or source.refine_extra_params
     ):
         return 0
     total = 0
     for camera in reconstruction.cameras.values():
-        if solver.refine_focal_length:
+        if source.refine_focal_length:
             total += len(list(camera.focal_length_idxs()))
-        if solver.refine_principal_point:
+        if source.refine_principal_point:
             total += len(list(camera.principal_point_idxs()))
-        if solver.refine_extra_params:
+        if source.refine_extra_params:
             total += len(list(camera.extra_params_idxs()))
     return total
 
@@ -235,7 +243,7 @@ def _redundancy(
         + n_blocks.get("camera_pose", 0)
         + n_blocks.get("reference_cloud", 0)
     )
-    n_free_camera = _free_camera_param_count(reconstruction, solver)
+    n_free_camera = _free_camera_param_count(reconstruction, result, solver)
     n_unk = 6 * n_img + 3 * n_points + n_free_camera
     n_datum = 7 if (result is not None and result.gauge is not None) else 0
     return n_eq - n_unk + n_datum, n_datum
@@ -512,7 +520,7 @@ def block_report(
             )
 
     redundancy, n_datum = _redundancy(reconstruction, n_obs, n_points, result, solver)
-    n_free_camera = _free_camera_param_count(reconstruction, solver)
+    n_free_camera = _free_camera_param_count(reconstruction, result, solver)
     n_eq = 2 * n_obs + 3 * (
         (result.n_blocks.get("marker_world", 0) if result else 0)
         + (result.n_blocks.get("camera_pose", 0) if result else 0)
@@ -521,7 +529,7 @@ def block_report(
     n_unk = 6 * n_img + 3 * n_points + n_free_camera
     caveat = (
         ""
-        if solver is not None
+        if solver is not None or (result is not None and result.options is not None)
         else "  (no solver given - assumed all intrinsics free)"
     )
     print(
@@ -726,7 +734,7 @@ def _cloud_rows(
 
 def accuracy_report(
     reconstruction: pycolmap.Reconstruction,
-    marker_xyz: dict[str, np.ndarray],
+    marker_xyz: dict[str, np.ndarray] | None,
     truth: GroundTruth,
     label: str = "",
     camera_priors_used: bool = False,
@@ -771,7 +779,7 @@ def accuracy_report(
             "(fit - priors used)" if camera_priors_used else "",
         )
 
-    if truth.marker_xyz:
+    if truth.marker_xyz and marker_xyz:
         if truth.control_names is None and truth.check_names is None:
             present = [n for n in marker_xyz if n in truth.marker_xyz]
             if present:

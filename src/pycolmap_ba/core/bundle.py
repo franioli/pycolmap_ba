@@ -71,36 +71,54 @@ from .camera_pose import (
     CameraPoseConstraints,
     add_camera_pose_constraints,
 )
+from .gcp import MarkerConstraints, add_marker_constraints
 from .ref_cloud import (
     CorrespondenceStats,
     ReferenceCloud,
     ReferenceCloudConstraints,
     add_reference_cloud_constraints,
 )
-from .gcp import MarkerConstraints, add_marker_constraints
 
 __all__ = [
     "BundleResult",
     "SolverOptions",
     "build_config",
-    "build_options",
     "run_bundle_adjustment",
     "solve_to_convergence",
 ]
 
 
-@dataclass
-class SolverOptions:
-    """Everything that goes into `pycolmap.BundleAdjustmentOptions`.
+class SolverOptions(pycolmap.BundleAdjustmentOptions):
+    """`pycolmap.BundleAdjustmentOptions`, pre-tuned for aerial-nadir BA.
 
-    Attributes:
+    A subclass rather than a wrapper: this *is* the object
+    `create_default_ceres_bundle_adjuster` takes, so there is no translation
+    step and no risk of it drifting out of sync with what actually got solved.
+    `.summary()` and `.todict()` both work as on any pycolmap options object,
+    and also show `gauge` / `max_solve_restarts` below, since pybind11 lets a
+    Python subclass carry its own attributes alongside the native ones.
+
+    The constructor arguments are the knobs this package actually tunes
+    (either their default differs from pycolmap's, or this package's code
+    reads them), plus two package-only concepts (`gauge`, `max_solve_restarts`)
+    that have no pycolmap equivalent. Anything else - refine_points3D, the
+    Ceres tolerance pair, GPU/CASPAR backend settings, and so on - goes in
+    `extra`; run `pycolmap.BundleAdjustmentOptions().summary()` to see the full
+    tree of what is available there.
+
+    Note: `copy.deepcopy`/pickling an instance falls back to plain
+    `pycolmap.BundleAdjustmentOptions` and drops `gauge`/`max_solve_restarts` -
+    pybind11's C++-level `__deepcopy__` does not know about the Python
+    subclass. Not used anywhere in this package today; worth remembering if
+    that changes.
+
+    Args:
         refine_focal_length: Optimise the focal length. On a flat nadir block
             this is degenerate without control - focal trades against scene
             depth - so keep it False unless markers or priors constrain it.
         refine_principal_point: Optimise cx, cy. Usually False; the principal
             point is weakly determined and readily absorbs other errors.
         refine_extra_params: Optimise distortion coefficients.
-        refine_points3D: Optimise the 3D tie points themselves.
         min_track_length: Exclude points with fewer observations from the
             problem. 0 disables the test. NOTE: such points are *ignored*, not
             deleted - they keep their pre-bundle coordinates and still reach any
@@ -120,28 +138,53 @@ class SolverOptions:
             gradient_tolerance; large blocks then run to the iteration cap and
             report NO_CONVERGENCE even though the cost stopped improving. 1e-8
             restores the usual behaviour.
-        gradient_tolerance: Absolute gradient max-norm stopping test.
-        parameter_tolerance: Relative step-size stopping test (0.0 = disabled,
-            matching COLMAP).
         max_solve_restarts: Re-invoke the solver up to this many times while it
             reports non-convergence; each call resumes from the current state.
         print_summary: Let COLMAP print its own bundle-adjustment report.
+        extra: Any further nested overrides for
+            `pycolmap.BundleAdjustmentOptions`, applied last via `.mergedict()`,
+            e.g. `{"ceres": {"solver_options": {"gradient_tolerance": 1e-6}}}`.
     """
 
-    refine_focal_length: bool = True
-    refine_principal_point: bool = False
-    refine_extra_params: bool = False
-    refine_points3D: bool = True
-    min_track_length: int = 0
-    gauge: Any = None  # None -> decided from the constraints
-    loss_function_type: Any = None  # None -> pycolmap.LossFunctionType.TRIVIAL
-    loss_function_scale: float = 1.0
-    max_num_iterations: int = 200
-    function_tolerance: float = 1e-8
-    gradient_tolerance: float = 1e-4
-    parameter_tolerance: float = 0.0
-    max_solve_restarts: int = 3
-    print_summary: bool = False
+    def __init__(
+        self,
+        *,
+        refine_focal_length: bool = True,
+        refine_principal_point: bool = False,
+        refine_extra_params: bool = False,
+        min_track_length: int = 0,
+        gauge: Any = None,  # None -> decided from the constraints
+        loss_function_type: Any = None,  # None -> pycolmap.LossFunctionType.TRIVIAL
+        loss_function_scale: float = 1.0,
+        max_num_iterations: int = 200,
+        function_tolerance: float = 1e-8,
+        max_solve_restarts: int = 3,
+        print_summary: bool = False,
+        extra: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(
+            {
+                "refine_focal_length": refine_focal_length,
+                "refine_principal_point": refine_principal_point,
+                "refine_extra_params": refine_extra_params,
+                "min_track_length": min_track_length,
+                "print_summary": print_summary,
+                "ceres": {
+                    "loss_function_type": (
+                        loss_function_type or pycolmap.LossFunctionType.TRIVIAL
+                    ),
+                    "loss_function_scale": loss_function_scale,
+                    "solver_options": {
+                        "max_num_iterations": max_num_iterations,
+                        "function_tolerance": function_tolerance,
+                    },
+                },
+            }
+        )
+        if extra:
+            self.mergedict(extra)
+        self.gauge = gauge
+        self.max_solve_restarts = max_solve_restarts
 
 
 @dataclass
@@ -191,6 +234,8 @@ class BundleResult:
         compatibility: Pre-flight check against the reference cloud, when
             `run_cloud_constrained_bundle_adjustment` ran one.
         prealign: What the pre-alignment did, if the guard had to invoke it.
+        options: The `SolverOptions` (itself a `pycolmap.BundleAdjustmentOptions`)
+            that was solved with.
     """
 
     reconstruction: pycolmap.Reconstruction
@@ -209,6 +254,7 @@ class BundleResult:
     gauge: Any = None
     compatibility: Any = None
     prealign: Any = None
+    options: Any = None
 
     def residuals(self, group: str, *, apply_loss: bool = False) -> np.ndarray:
         """Whitened residuals of one constraint group, one row per block.
@@ -259,41 +305,9 @@ class BundleResult:
             return np.empty(0)
         squared = (plain**2).sum(axis=1)
         robust = (self.residuals(group, apply_loss=True) ** 2).sum(axis=1)
-        return np.where(squared > 0, robust / np.maximum(squared, np.finfo(float).tiny), 1.0)
-
-
-def build_options(solver: SolverOptions) -> pycolmap.BundleAdjustmentOptions:
-    """Translate `SolverOptions` into a `pycolmap.BundleAdjustmentOptions`.
-
-    Args:
-        solver: The settings to apply.
-
-    Returns:
-        A configured options object ready for
-        `create_default_ceres_bundle_adjuster`.
-    """
-    options = pycolmap.BundleAdjustmentOptions()
-    options.refine_focal_length = solver.refine_focal_length
-    options.refine_principal_point = solver.refine_principal_point
-    options.refine_extra_params = solver.refine_extra_params
-    options.refine_points3D = solver.refine_points3D
-    options.print_summary = solver.print_summary
-    # Lives on the options object itself, unlike the loss/solver settings.
-    options.min_track_length = solver.min_track_length
-
-    # The loss knobs live on `ceres`, mirroring the C++ options.ceres->...
-    options.ceres.loss_function_type = (
-        solver.loss_function_type or pycolmap.LossFunctionType.TRIVIAL
-    )
-    options.ceres.loss_function_scale = solver.loss_function_scale
-
-    solver_options = options.ceres.solver_options
-    solver_options.max_num_iterations = solver.max_num_iterations
-    solver_options.function_tolerance = solver.function_tolerance
-    solver_options.gradient_tolerance = solver.gradient_tolerance
-    solver_options.parameter_tolerance = solver.parameter_tolerance
-
-    return options
+        return np.where(
+            squared > 0, robust / np.maximum(squared, np.finfo(float).tiny), 1.0
+        )
 
 
 def build_config(
@@ -406,8 +420,9 @@ def run_bundle_adjustment(
             of building a second adjuster, which silently orphans every block
             added here and leaves the solve running on tie points alone.
     """
-    solver = solver or SolverOptions()
-    options = build_options(solver)
+    # `SolverOptions` is itself a `pycolmap.BundleAdjustmentOptions`, so this is
+    # what gets solved - no separate translation step.
+    options = solver = solver or SolverOptions()
 
     # Anything that ties the block to world coordinates also fixes the datum.
     # Only then is gauge fixing wrong: it would over-constrain the network. A
@@ -424,9 +439,9 @@ def run_bundle_adjustment(
     config = build_config(
         reconstruction,
         constant_intrinsics=not (
-            solver.refine_focal_length
-            or solver.refine_principal_point
-            or solver.refine_extra_params
+            options.refine_focal_length
+            or options.refine_principal_point
+            or options.refine_extra_params
         ),
         image_ids=image_ids,
         gauge=gauge,
@@ -577,4 +592,5 @@ def run_bundle_adjustment(
         residual_blocks=residual_blocks,
         retained=retained,
         gauge=gauge,
+        options=options,
     )

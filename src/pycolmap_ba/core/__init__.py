@@ -26,7 +26,6 @@ from .bundle import (
     BundleResult,
     SolverOptions,
     build_config,
-    build_options,
     run_bundle_adjustment,
     solve_to_convergence,
 )
@@ -60,7 +59,6 @@ __all__ = [
     "add_marker_constraints",
     "add_reference_cloud_constraints",
     "build_config",
-    "build_options",
     "cov_in_tie_units",
     "covs_in_tie_units",
     "datum_information",
