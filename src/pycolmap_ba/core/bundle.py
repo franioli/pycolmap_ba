@@ -92,7 +92,7 @@ __all__ = [
     "SolverOptions",
     "build_config",
     "run_bundle_adjustment",
-    "solve_to_convergence",
+    "_solve_to_convergence",
 ]
 
 
@@ -170,25 +170,23 @@ class SolverOptions(pycolmap.BundleAdjustmentOptions):
         print_summary: bool = False,
         extra: dict[str, Any] | None = None,
     ) -> None:
-        super().__init__(
-            {
-                "refine_focal_length": refine_focal_length,
-                "refine_principal_point": refine_principal_point,
-                "refine_extra_params": refine_extra_params,
-                "min_track_length": min_track_length,
-                "print_summary": print_summary,
-                "ceres": {
-                    "loss_function_type": (
-                        loss_function_type or pycolmap.LossFunctionType.TRIVIAL
-                    ),
-                    "loss_function_scale": loss_function_scale,
-                    "solver_options": {
-                        "max_num_iterations": max_num_iterations,
-                        "function_tolerance": function_tolerance,
-                    },
+        super().__init__({
+            "refine_focal_length": refine_focal_length,
+            "refine_principal_point": refine_principal_point,
+            "refine_extra_params": refine_extra_params,
+            "min_track_length": min_track_length,
+            "print_summary": print_summary,
+            "ceres": {
+                "loss_function_type": (
+                    loss_function_type or pycolmap.LossFunctionType.TRIVIAL
+                ),
+                "loss_function_scale": loss_function_scale,
+                "solver_options": {
+                    "max_num_iterations": max_num_iterations,
+                    "function_tolerance": function_tolerance,
                 },
-            }
-        )
+            },
+        })
         if extra:
             self.mergedict(extra)
         self.gauge = gauge
@@ -459,7 +457,7 @@ def build_config(
     return config
 
 
-def solve_to_convergence(
+def _solve_to_convergence(
     bundle_adjuster: Any, max_restarts: int = 3, verbose: bool = True
 ) -> tuple[Any, bool]:
     """Solve, re-invoking while the solver reports non-convergence.
@@ -588,9 +586,8 @@ def run_bundle_adjustment(
 
     # Negative-depth points make the problem degenerate; COLMAP's own mapper
     # drops them before every global bundle.
-    pycolmap.ObservationManager(
-        reconstruction
-    ).filter_observations_with_negative_depth()
+    observation_manager = pycolmap.ObservationManager(reconstruction)
+    observation_manager.filter_observations_with_negative_depth()
 
     # Create the adjuster ONCE and add every block to *its* problem. Building a
     # second adjuster over the same config/reconstruction yields a different
@@ -662,7 +659,7 @@ def run_bundle_adjustment(
             f"{n_blocks['reference_cloud']} reference cloud)"
         )
 
-    summary, converged = solve_to_convergence(
+    summary, converged = _solve_to_convergence(
         bundle_adjuster, solver.max_solve_restarts, verbose
     )
     usable = bool(summary is not None and summary.is_solution_usable())
@@ -678,7 +675,9 @@ def run_bundle_adjustment(
 
     n_filtered = 0
     if filters is not None:
-        n_filtered = filter_reconstruction(reconstruction, filters, verbose)
+        n_filtered = filter_reconstruction(
+            reconstruction=reconstruction, filters=filters, verbose=verbose
+        )
         # Filtering deletes Point3D entries, and the reference-cloud blocks hold
         # raw pointers into them. Drop the ones whose point is gone or the
         # problem would evaluate freed memory - silently, with plausible

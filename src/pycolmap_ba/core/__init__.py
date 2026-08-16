@@ -29,9 +29,9 @@ still live in `utils`, since neither touches a Ceres problem or a
 from .bundle import (
     BundleResult,
     SolverOptions,
+    _solve_to_convergence,
     build_config,
     run_bundle_adjustment,
-    solve_to_convergence,
 )
 from .camera_pose import CameraPoseConstraints, add_camera_pose_constraints
 from .covariance import (
@@ -85,7 +85,7 @@ __all__ = [
     "point_covariances",
     "run_bundle_adjustment",
     "run_cloud_constrained_bundle_adjustment",
-    "solve_to_convergence",
+    "_solve_to_convergence",
     "std_norm",
     "variance_factor",
 ]

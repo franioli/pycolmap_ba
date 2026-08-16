@@ -52,8 +52,9 @@ class FilterOptions:
 
 
 def filter_reconstruction(
-    reconstruction: pycolmap.Reconstruction,
-    filters: FilterOptions,
+    observation_manager: pycolmap.ObservationManager | None = None,
+    reconstruction: pycolmap.Reconstruction | None = None,
+    filters: FilterOptions | None = None,
     verbose: bool = True,
 ) -> int:
     """Delete weak points through COLMAP's `ObservationManager`.
@@ -62,26 +63,40 @@ def filter_reconstruction(
     COLMAP's correspondence bookkeeping stays consistent.
 
     Args:
-        reconstruction: Modified in place.
-        filters: Thresholds to apply.
+        observation_manager: If provided, used instead of creating a new one.
+        reconstruction: Modified in place. If not provided, uses the one from
+            `observation_manager`.
+        filters: Thresholds to apply. If not provided, uses the defaults in
+            `FilterOptions`.
         verbose: Print how many observations were removed.
 
     Returns:
         Number of filtered observations.
     """
-    manager = pycolmap.ObservationManager(reconstruction)
+    if observation_manager is None:
+        if reconstruction is None:
+            raise ValueError(
+                "Either `observation_manager` or `reconstruction` must be provided."
+            )
+        elif reconstruction is not None:
+            observation_manager = pycolmap.ObservationManager(reconstruction)
+
+    if filters is None:
+        filters = FilterOptions()
+
     # Covers reprojection error, negative depth and triangulation angle.
-    n_filtered = manager.filter_all_points3D(
-        filters.max_reproj_error, filters.min_tri_angle_deg
+    n_filtered = observation_manager.filter_all_points3D(
+        filters.max_reproj_error, filters.min_tri_angle_deg if filters else 1.5
     )
     if filters.min_track_length > 0:
-        n_filtered += manager.filter_points3D_with_short_tracks(
+        n_filtered += observation_manager.filter_points3D_with_short_tracks(
             filters.min_track_length
         )
+
     if verbose:
         print(
             f"  filtered {n_filtered} observations -> "
-            f"{reconstruction.num_points3D():,} points remain"
+            f"{reconstruction.num_points3D() if reconstruction else None:,}points remain"
         )
     return n_filtered
 
