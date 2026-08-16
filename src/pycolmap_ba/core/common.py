@@ -19,7 +19,7 @@ __all__ = ["cov_in_tie_units", "covs_in_tie_units"]
 
 
 def cov_in_tie_units(
-    sigma: float | Sequence[float], tie_points_sigma_px: float, size: int
+    sigma: float | Sequence[float] | np.ndarray, tie_points_sigma_px: float, size: int
 ) -> np.ndarray:
     """Build a diagonal covariance for `sigma`, in tie-point sigma units.
 

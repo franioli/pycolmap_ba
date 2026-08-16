@@ -58,7 +58,7 @@ class CameraPoseConstraints:
     """
 
     positions: dict[str, np.ndarray]
-    sigma_m: float | Sequence[float] = 0.10
+    sigma_m: float | Sequence[float] | np.ndarray = 0.10
     cam_from_world: dict[str, pycolmap.Rigid3d] | None = None
     sigma_rot_deg: float | None = None
     robust_loss_scale: float | None = None

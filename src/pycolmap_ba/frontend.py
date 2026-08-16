@@ -263,7 +263,7 @@ def seed_intrinsics(
 def write_pose_priors(
     database_path: Path,
     xyz: dict[str, np.ndarray],
-    sigma_m: float | Sequence[float] = 0.10,
+    sigma_m: float | Sequence[float] | np.ndarray = 0.10,
     verbose: bool = True,
 ) -> int:
     """Store prior camera positions (e.g. GNSS) in the database.

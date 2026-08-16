@@ -72,7 +72,7 @@ class MarkerConstraints:
     xyz: dict[str, np.ndarray]
     control_names: Sequence[str] | None = None
     sigma_px: float = 1.0
-    sigma_m: float | Sequence[float] = (0.02, 0.02, 0.03)
+    sigma_m: float | Sequence[float] | np.ndarray = (0.02, 0.02, 0.03)
     robust_loss_scale: float | None = 2.8
 
 
