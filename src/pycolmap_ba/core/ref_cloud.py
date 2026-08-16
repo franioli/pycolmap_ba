@@ -77,7 +77,7 @@ import numpy as np
 import pyceres
 import pycolmap
 
-from .common import covs_in_tie_units
+from .covariance import covs_in_tie_units
 
 __all__ = [
     "CorrespondenceStats",

@@ -11,8 +11,8 @@ and solving it live elsewhere:
 
 * `cloud_bundle`     - alternating solve / re-correspondence around this
   function, in this package
+* `covariance`       - posterior covariances of the result, in this package
 * `utils.filtering`  - post-solve removal of unsupportable points
-* `utils.covariance` - posterior covariances of the result
 * `utils.prealign`   - getting the block into range before any of this
 
 Examples:
@@ -65,11 +65,19 @@ import numpy as np
 import pyceres
 import pycolmap
 
-from ..utils.covariance import estimate_covariance
-from ..utils.filtering import FilterOptions, filter_reconstruction
+from ..utils.filtering import FilterOptions, filter_reconstruction, surviving_blocks
 from .camera_pose import (
     CameraPoseConstraints,
     add_camera_pose_constraints,
+)
+from .covariance import (
+    VarianceFactor,
+    camera_center_covariances,
+    camera_pose_covariances,
+    estimate_covariance,
+    marker_covariances,
+    point_covariances,
+    variance_factor,
 )
 from .gcp import MarkerConstraints, add_marker_constraints
 from .ref_cloud import (
@@ -218,8 +226,12 @@ class BundleResult:
             `marker_world`, `camera_pose`, `reference_cloud` - as they were
             *solved*, before any filtering.
         n_filtered: Observations removed by post-solve filtering.
-        covariance: `pycolmap.BACovariance` when `covariance=True` was requested
-            and the estimation succeeded, else None.
+        BACovariance: The raw `pycolmap.BACovariance` when `covariance=True` was
+            requested and the estimation succeeded, else None. Capitalised to
+            match the pycolmap type it holds and stay visually distinct from
+            the `*_covariances` methods below, which return the correctly
+            *scaled* per-parameter covariance dicts - this is the unscaled
+            cofactor object they are all built from (see `core.covariance`).
         correspondences: Reference-cloud correspondence stats of this solve,
             None if no reference cloud was used.
         passes: Per-pass records from
@@ -245,7 +257,7 @@ class BundleResult:
     usable: bool = False
     n_blocks: dict[str, int] = field(default_factory=dict)
     n_filtered: int = 0
-    covariance: Any = None
+    BACovariance: Any = None
     correspondences: CorrespondenceStats | None = None
     passes: list[dict[str, Any]] = field(default_factory=list)
     problem: pyceres.Problem | None = None
@@ -255,6 +267,112 @@ class BundleResult:
     compatibility: Any = None
     prealign: Any = None
     options: Any = None
+    _variance_factor_cache: VarianceFactor | None = field(
+        default=None, repr=False, compare=False
+    )
+
+    def variance_factor(self, *, tie_points_sigma_px: float = 0.5) -> VarianceFactor:
+        """The a-posteriori variance factor sigma-hat-0 of this solve.
+
+        Self-contained wrapper on `covariance.variance_factor`: needs nothing
+        but `self`. Cached on first call, since `block_report` and every
+        `*_covariances` method below need it and recomputing means re-walking
+        every tie-point observation by reprojection again. Call with a
+        different `tie_points_sigma_px` to force a recompute at that reference
+        sigma instead.
+
+        Args:
+            tie_points_sigma_px: The sigma the bundle was assembled with.
+
+        Returns:
+            The `VarianceFactor`.
+        """
+        cached = self._variance_factor_cache
+        if cached is None or cached.tie_points_sigma_px != tie_points_sigma_px:
+            self._variance_factor_cache = cached = variance_factor(
+                self.reconstruction, self, tie_points_sigma_px=tie_points_sigma_px
+            )
+        return cached
+
+    def point_covariances(
+        self,
+        *,
+        scale_by_sigma0: bool = True,
+        sigma0: float | None = None,
+        point3D_ids: Any = None,
+    ) -> dict[int, np.ndarray | None]:
+        """Self-contained wrapper on `covariance.point_covariances`.
+
+        Args:
+            scale_by_sigma0: Multiply by `self.variance_factor().sigma0 ** 2`.
+                True unless you want the raw, unscaled cofactor.
+            sigma0: Override the internally computed sigma0 - e.g. to reuse one
+                sigma0 across several calls without recomputing it each time.
+            point3D_ids: Restrict to these ids. None uses every point in
+                `self.reconstruction.points3D`.
+
+        Returns:
+            See `covariance.point_covariances`.
+        """
+        s0 = sigma0 if sigma0 is not None else self.variance_factor().sigma0
+        return point_covariances(
+            self.reconstruction,
+            self.BACovariance,
+            s0,
+            scale_by_sigma0=scale_by_sigma0,
+            point3D_ids=point3D_ids,
+        )
+
+    def camera_pose_covariances(
+        self, *, scale_by_sigma0: bool = True, sigma0: float | None = None
+    ) -> dict[int, np.ndarray | None]:
+        """Self-contained wrapper on `covariance.camera_pose_covariances`.
+
+        Args:
+            scale_by_sigma0: Multiply by `self.variance_factor().sigma0 ** 2`.
+            sigma0: Override the internally computed sigma0.
+
+        Returns:
+            See `covariance.camera_pose_covariances`.
+        """
+        s0 = sigma0 if sigma0 is not None else self.variance_factor().sigma0
+        return camera_pose_covariances(
+            self.reconstruction, self.BACovariance, s0, scale_by_sigma0=scale_by_sigma0
+        )
+
+    def camera_center_covariances(
+        self, *, scale_by_sigma0: bool = True, sigma0: float | None = None
+    ) -> dict[int, np.ndarray | None]:
+        """Self-contained wrapper on `covariance.camera_center_covariances`.
+
+        Args:
+            scale_by_sigma0: Multiply by `self.variance_factor().sigma0 ** 2`.
+            sigma0: Override the internally computed sigma0.
+
+        Returns:
+            See `covariance.camera_center_covariances`.
+        """
+        s0 = sigma0 if sigma0 is not None else self.variance_factor().sigma0
+        return camera_center_covariances(
+            self.reconstruction, self.BACovariance, s0, scale_by_sigma0=scale_by_sigma0
+        )
+
+    def marker_covariances(
+        self, *, scale_by_sigma0: bool = True, sigma0: float | None = None
+    ) -> dict[str, np.ndarray | None]:
+        """Self-contained wrapper on `covariance.marker_covariances`.
+
+        Args:
+            scale_by_sigma0: Multiply by `self.variance_factor().sigma0 ** 2`.
+            sigma0: Override the internally computed sigma0.
+
+        Returns:
+            See `covariance.marker_covariances`.
+        """
+        s0 = sigma0 if sigma0 is not None else self.variance_factor().sigma0
+        return marker_covariances(
+            self.marker_xyz, self.BACovariance, s0, scale_by_sigma0=scale_by_sigma0
+        )
 
     def residuals(self, group: str, *, apply_loss: bool = False) -> np.ndarray:
         """Whitened residuals of one constraint group, one row per block.
@@ -262,7 +380,7 @@ class BundleResult:
         These are Ceres's own residuals, so they are whitened in the units the
         problem was assembled in: `tie_points_sigma_px` times the properly
         whitened residual, since every sigma was divided by that (see
-        `core.common`). Divide by it to read them as sigmas.
+        `covariance.cov_in_tie_units`). Divide by it to read them as sigmas.
 
         Args:
             group: A key of `residual_blocks`.
@@ -566,17 +684,11 @@ def run_bundle_adjustment(
         # problem would evaluate freed memory - silently, with plausible
         # numbers, which is the worst kind of wrong.
         if correspondences is not None and n_filtered:
-            alive = [
-                pid in reconstruction.points3D
-                for pid in correspondences.point3D_ids.tolist()
-            ]
-            residual_blocks["reference_cloud"] = [
-                block
-                for block, keep in zip(
-                    residual_blocks["reference_cloud"], alive, strict=True
-                )
-                if keep
-            ]
+            residual_blocks["reference_cloud"] = surviving_blocks(
+                reconstruction,
+                correspondences.point3D_ids,
+                residual_blocks["reference_cloud"],
+            )
 
     return BundleResult(
         reconstruction=reconstruction,
@@ -586,7 +698,7 @@ def run_bundle_adjustment(
         usable=usable,
         n_blocks=n_blocks,
         n_filtered=n_filtered,
-        covariance=ba_covariance,
+        BACovariance=ba_covariance,
         correspondences=correspondences,
         problem=problem,
         residual_blocks=residual_blocks,

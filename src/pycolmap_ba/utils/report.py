@@ -25,10 +25,12 @@ import numpy as np
 import pandas as pd
 import pycolmap
 
+from ..core.covariance import std_norm, variance_factor
 from .geometry import rotation_error_deg
 
 if TYPE_CHECKING:  # pragma: no cover - typing only, avoids a circular import
     from ..core.bundle import BundleResult, SolverOptions
+    from ..core.covariance import VarianceFactor
     from ..core.ref_cloud import ReferenceCloud
 
 __all__ = [
@@ -167,133 +169,12 @@ def _triangulation_angles_deg(reconstruction: pycolmap.Reconstruction) -> np.nda
     return np.asarray(angles)
 
 
-def _free_camera_param_count(
-    reconstruction: pycolmap.Reconstruction,
-    result: BundleResult | None,
-    solver: SolverOptions | None,
-) -> int:
-    """Number of intrinsics parameters actually left free.
-
-    Prefers `result.options` - the `pycolmap.BundleAdjustmentOptions` that was
-    actually solved with - over `solver`, since `SolverOptions.extra` can
-    override a refine_* flag after `solver` was built. Falling back to neither
-    (no result and no solver given) assumes "every parameter free", the same
-    assumption the old, buggy redundancy formula made unconditionally - kept
-    here only as the least-wrong default when the caller cannot say, and
-    printed with a caveat by the caller.
-
-    Args:
-        reconstruction: Source of the cameras.
-        result: The solved `BundleResult`, if available.
-        solver: The settings the bundle was run with, if `result` isn't.
-
-    Returns:
-        Total free intrinsics parameters, summed over all cameras.
-    """
-    result_options = result.options if result is not None else None
-    source = result_options if result_options is not None else solver
-    if source is None:
-        return sum(len(camera.params) for camera in reconstruction.cameras.values())
-    if not (
-        source.refine_focal_length
-        or source.refine_principal_point
-        or source.refine_extra_params
-    ):
-        return 0
-    total = 0
-    for camera in reconstruction.cameras.values():
-        if source.refine_focal_length:
-            total += len(list(camera.focal_length_idxs()))
-        if source.refine_principal_point:
-            total += len(list(camera.principal_point_idxs()))
-        if source.refine_extra_params:
-            total += len(list(camera.extra_params_idxs()))
-    return total
-
-
-def _redundancy(
-    reconstruction: pycolmap.Reconstruction,
-    n_obs: int,
-    n_points: int,
-    result: BundleResult | None,
-    solver: SolverOptions | None,
-) -> tuple[int, int]:
-    """Photogrammetric redundancy `r = n_eq - n_unk + n_datum`.
-
-    Fixes the previous formula, which ignored held-constant intrinsics, the
-    marker/camera-pose/reference-cloud constraint equations, and gauge-fixing
-    datum DOF.
-
-    Args:
-        reconstruction: Source of the images and cameras.
-        n_obs: Tie-point observations (`sum(track lengths)`).
-        n_points: 3D points in the block.
-        result: The solved bundle, if available - supplies the added
-            constraint-equation counts and whether the gauge was fixed.
-        solver: The solver settings used, if available - decides how many
-            intrinsics parameters were actually free.
-
-    Returns:
-        `(redundancy, n_datum)`.
-    """
-    n_img = reconstruction.num_reg_images()
-    n_blocks = result.n_blocks if result is not None else {}
-    n_eq = 2 * n_obs + 3 * (
-        n_blocks.get("marker_world", 0)
-        + n_blocks.get("camera_pose", 0)
-        + n_blocks.get("reference_cloud", 0)
-    )
-    n_free_camera = _free_camera_param_count(reconstruction, result, solver)
-    n_unk = 6 * n_img + 3 * n_points + n_free_camera
-    n_datum = 7 if (result is not None and result.gauge is not None) else 0
-    return n_eq - n_unk + n_datum, n_datum
-
-
-def _sigma0(
-    reconstruction: pycolmap.Reconstruction,
-    result: BundleResult | None,
-    redundancy: int,
-) -> float:
-    """Overall variance factor sigma-hat-0, in tie-point-sigma units.
-
-    `sigma0^2 = sum(whitened residuals^2) / redundancy`; sigma0 near 1 says the
-    assumed sigmas were about right, well above 1 says they were too tight (or
-    the model does not fit), well below says too loose.
-
-    Tie-point residuals are approximated from `Point3D.error` - COLMAP's own
-    per-point mean reprojection error - since their per-observation residual
-    block ids are not retained (COLMAP owns those blocks and never hands them
-    back): `sum_i r_i^2 ~= track_length * error_point^2`. Every added
-    constraint group's residual is exact, via `result.residuals`.
-
-    Args:
-        reconstruction: Source of the points.
-        result: The solved bundle, if available.
-        redundancy: The corrected redundancy (see `_redundancy`).
-
-    Returns:
-        `sigma0_hat`, or NaN if the redundancy is not positive.
-    """
-    if redundancy <= 0:
-        return float("nan")
-    points = list(reconstruction.points3D.values())
-    track = np.array([p.track.length() for p in points], dtype=float)
-    error = np.array([p.error for p in points], dtype=float)
-    total_sq = float(np.sum(track * error**2))
-    if result is not None:
-        for group in ("marker_image", "marker_world", "camera_pose", "reference_cloud"):
-            r = result.residuals(group)
-            if r.size:
-                total_sq += float((r**2).sum())
-    return float(np.sqrt(total_sq / redundancy))
-
-
 def _process_section(
     reconstruction: pycolmap.Reconstruction,
     result: BundleResult,
     n_obs: int,
     n_points: int,
-    redundancy: int,
+    vf: VarianceFactor,
 ) -> None:
     """Print solver outcome, block composition, robust-loss and per-pass data.
 
@@ -307,8 +188,9 @@ def _process_section(
         result: The solved bundle.
         n_obs: Tie-point observations, already computed by the caller.
         n_points: 3D points in the block, already computed by the caller.
-        redundancy: The overall redundancy `block_report` already computed,
-            apportioned below by observation-equation count.
+        vf: The `VarianceFactor` `block_report` already computed - its
+            redundancy is apportioned below by observation-equation count, and
+            its sigma0 scales the posterior covariance summary.
     """
     outcome = "CONVERGED" if result.converged else "NOT CONVERGED"
     print(f"\n  solver            {outcome}  (usable: {result.usable})")
@@ -341,7 +223,7 @@ def _process_section(
             r = result.residuals(group)
             msr = float((r**2).sum() / r.size) if r.size else float("nan")
             eq_g = dim * len(blocks)
-            r_g = eq_g / total_eq * redundancy if total_eq else float("nan")
+            r_g = eq_g / total_eq * vf.redundancy if total_eq else float("nan")
             line = (
                 f"    {group:<17}n={len(blocks):,}  mean sq whitened resid={msr:.3f}"
                 f"  (r_g~={r_g:.0f})"
@@ -383,42 +265,67 @@ def _process_section(
     if result.prealign is not None:
         print(f"  {result.prealign.summary()}")
 
-    if result.covariance is not None:
-        _posterior_sigma_summary(reconstruction, result.covariance)
+    if result.BACovariance is not None:
+        _posterior_sigma_summary(result, vf.sigma0)
 
 
-def _posterior_sigma_summary(
-    reconstruction: pycolmap.Reconstruction, covariance: Any
-) -> None:
-    """Print a one-line summary of the posterior camera-position sigmas.
+def _posterior_sigma_summary(result: BundleResult, sigma0: float) -> None:
+    """Print posterior `std_norm` summaries for camera centres, points, markers.
 
-    Best-effort: `pycolmap.BACovariance`'s per-image matrix layout is not
-    pinned down here, so this only reports the position sub-block trace and
-    says nothing about rotations or points. Silently skipped if the API
-    disagrees with that assumption.
+    Every figure is `std_norm = sqrt(trace(Sigma))` (`core.covariance.std_norm`),
+    scaled by `sigma0^2` - see `core.covariance.variance_factor` and
+    `docs/posterior_covariance.md`. Camera centres use the full 6x6
+    rotation-translation propagation (`BundleResult.camera_center_covariances`),
+    not just the translation sub-block. Points are *conditional* on
+    poses/intrinsics; markers are *marginal* over the whole block - the two
+    are not on the same statistical footing, hence the separate caveat on the
+    points line.
 
     Args:
-        reconstruction: Source of the registered images.
-        covariance: The `pycolmap.BACovariance` from `estimate_covariance`.
+        result: The solved bundle.
+        sigma0: The a-posteriori sigma computed by the caller (`block_report`) -
+            passed in explicitly, rather than recomputed here, so every group
+            below is scaled by the exact same number that was printed for
+            `sigma0_hat`.
     """
-    sigmas = []
-    for image_id in reconstruction.reg_image_ids():
-        try:
-            cov = np.asarray(covariance.get_cam_cov_from_world(image_id))
-        except Exception:
-            continue
-        if cov.ndim != 2 or cov.shape[0] < 3:
-            continue
-        position = cov[-3:, -3:]  # translation block, by convention last
-        sigmas.append(float(np.sqrt(np.mean(np.diag(position)))))
-    if sigmas:
-        arr = np.asarray(sigmas) * 100
+    if np.isnan(sigma0):
         print(
-            f"\n  posterior camera-position sigma (n={len(arr)}): "
-            f"median {np.median(arr):.2f} cm, max {arr.max():.2f} cm"
+            "\n  posterior covariance available but sigma0 is undefined "
+            "(r <= 0) - not scaled"
         )
-    else:
-        print("\n  posterior covariance available (per-image sigmas not extracted)")
+        return
+
+    print(f"\n  posterior sigma (a posteriori, scaled by sigma0^2 = {sigma0**2:.4g})")
+
+    centres = result.camera_center_covariances(sigma0=sigma0)
+    c_values = np.array([std_norm(c) for c in centres.values() if c is not None]) * 100
+    if c_values.size:
+        print(
+            f"    camera centres   n={c_values.size:<8,}"
+            f"median {np.median(c_values):.2f}   p90 {np.percentile(c_values, 90):.2f}"
+            f"   max {c_values.max():.2f} cm"
+        )
+
+    points = result.point_covariances(sigma0=sigma0)
+    p_values = np.array([std_norm(c) for c in points.values() if c is not None]) * 100
+    n_no_cov = sum(1 for c in points.values() if c is None)
+    if p_values.size:
+        skip = f"  ({n_no_cov:,} without covariance)" if n_no_cov else ""
+        print(
+            f"    tie points       n={p_values.size:<8,}"
+            f"median {np.median(p_values):.2f}   p90 {np.percentile(p_values, 90):.2f}"
+            f"   max {p_values.max():.2f} cm  (conditional on poses/intrinsics)"
+            f"{skip}"
+        )
+
+    markers = result.marker_covariances(sigma0=sigma0)
+    m_values = np.array([std_norm(c) for c in markers.values() if c is not None]) * 100
+    if m_values.size:
+        print(
+            f"    markers          n={m_values.size:<8,}"
+            f"median {np.median(m_values):.2f}   p90 {np.percentile(m_values, 90):.2f}"
+            f"   max {m_values.max():.2f} cm  (marginal)"
+        )
 
 
 def block_report(
@@ -449,16 +356,18 @@ def block_report(
             observability line.
         solver: The solver settings used, if available - lets the redundancy
             count only the intrinsics parameters that were actually free.
-        tie_points_sigma_px: The sigma the bundle was assembled with. Not
-            currently used beyond documenting the units sigma0 is reported in
-            (tie-point-sigma units, same as `BundleResult.residuals`).
+        tie_points_sigma_px: The sigma the bundle was assembled with (see
+            `core.covariance.cov_in_tie_units`). Feeds `variance_factor`: every
+            added constraint's residual is already whitened into these units,
+            and `sigma0_ratio` in the return value is
+            `sigma0 / tie_points_sigma_px`.
         triangulation_angles: Print the triangulation-angle section. Default on
             - sub-second on this project's blocks.
         label: Suffix for the header, e.g. "after GCP bundle".
 
     Returns:
-        Headline scalars: `sigma0`, `redundancy`, `reproj_rms_px`,
-        `median_tri_angle_deg`, `n_points`, `n_constrained`.
+        Headline scalars: `sigma0`, `sigma0_ratio`, `redundancy`,
+        `reproj_rms_px`, `median_tri_angle_deg`, `n_points`, `n_constrained`.
     """
     banner(f"BLOCK QUALITY{f' - {label}' if label else ''}")
 
@@ -519,29 +428,14 @@ def block_report(
                 f"({100 * below.mean():.1f}%)"
             )
 
-    redundancy, n_datum = _redundancy(reconstruction, n_obs, n_points, result, solver)
-    n_free_camera = _free_camera_param_count(reconstruction, result, solver)
-    n_eq = 2 * n_obs + 3 * (
-        (result.n_blocks.get("marker_world", 0) if result else 0)
-        + (result.n_blocks.get("camera_pose", 0) if result else 0)
-        + (result.n_blocks.get("reference_cloud", 0) if result else 0)
+    vf = variance_factor(
+        reconstruction, result, solver=solver, tie_points_sigma_px=tie_points_sigma_px
     )
-    n_unk = 6 * n_img + 3 * n_points + n_free_camera
-    caveat = (
-        ""
-        if solver is not None or (result is not None and result.options is not None)
-        else "  (no solver given - assumed all intrinsics free)"
-    )
-    print(
-        f"\n  redundancy        {n_eq:,} equations - {n_unk:,} unknowns"
-        f"{f' + {n_datum} datum' if n_datum else ''}  ->  r = {redundancy:,}{caveat}"
-    )
-    sigma0 = _sigma0(reconstruction, result, redundancy)
-    print(f"  sigma0_hat        {sigma0:.3f}  (1.0 = assumed sigmas about right)")
+    print(vf.summary())
 
     n_constrained = 0
     if result is not None:
-        _process_section(reconstruction, result, n_obs, n_points, redundancy)
+        _process_section(reconstruction, result, n_obs, n_points, vf)
         if result.correspondences is not None:
             n_constrained = result.correspondences.n_used
             if cloud is not None and n_constrained:
@@ -566,8 +460,9 @@ def block_report(
             print(f"    worst:  {worst_str}")
 
     return {
-        "sigma0": sigma0,
-        "redundancy": float(redundancy),
+        "sigma0": vf.sigma0,
+        "sigma0_ratio": vf.ratio,
+        "redundancy": float(vf.redundancy),
         "reproj_rms_px": float(reproj_stats["rms"]),
         "median_tri_angle_deg": median_tri_angle,
         "n_points": float(n_points),
