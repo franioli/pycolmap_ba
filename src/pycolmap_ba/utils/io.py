@@ -55,6 +55,7 @@ def export_reconstruction(
 def save_point_cloud_as_ply(
     reconstruction: pycolmap.Reconstruction,
     output_path: Path,
+    point_covariances: dict[int, np.ndarray | None] | None = None,
     **scalars: np.ndarray,
 ) -> bool:
     """Save the 3D points as a PLY carrying track length and reprojection error.
@@ -67,6 +68,14 @@ def save_point_cloud_as_ply(
     Args:
         reconstruction: Source of the points.
         output_path: Destination `.ply` file.
+        point_covariances: Per-point 3x3 posterior covariance (world X/Y/Z),
+            keyed by `point3D_id` - e.g. `{id: cov.get_point_cov(id) for id in
+            reconstruction.points3D}` from a `pycolmap.BACovariance` (see
+            `estimate_covariance`). Adds the marginal standard deviations
+            `std_x`/`std_y`/`std_z` plus `std_norm`, their Euclidean norm - the
+            single-number tie-point "Error" Metashape reports in its reference
+            panel. A missing id or a non-3x3 entry (point held constant in the
+            adjustment) gets NaN.
         **scalars: Extra per-point fields, each `(N,)` in the iteration order of
             `reconstruction.points3D` - e.g. `surface_distance=...` to colour the
             cloud by its residual against a reference surface in CloudCompare.
@@ -79,6 +88,7 @@ def save_point_cloud_as_ply(
     """
     import open3d as o3d
 
+    ids = list(reconstruction.points3D.keys())
     points = list(reconstruction.points3D.values())
     cloud = o3d.t.geometry.PointCloud()
     cloud.point.positions = o3d.core.Tensor(
@@ -91,6 +101,18 @@ def save_point_cloud_as_ply(
     cloud.point.reproj_error = o3d.core.Tensor(
         np.array([[p.error] for p in points], np.float32)
     )
+    if point_covariances is not None:
+        std = np.full((len(points), 3), np.nan, np.float32)
+        for i, point_id in enumerate(ids):
+            cov_pt = point_covariances.get(point_id)
+            if cov_pt is not None and np.shape(cov_pt) == (3, 3):
+                std[i] = np.sqrt(np.clip(np.diag(cov_pt), 0, None))
+        cloud.point.std_x = o3d.core.Tensor(std[:, 0:1])
+        cloud.point.std_y = o3d.core.Tensor(std[:, 1:2])
+        cloud.point.std_z = o3d.core.Tensor(std[:, 2:3])
+        cloud.point.std_norm = o3d.core.Tensor(
+            np.linalg.norm(std, axis=1, keepdims=True).astype(np.float32)
+        )
     for name, values in scalars.items():
         values = np.asarray(values, dtype=np.float32).reshape(-1, 1)
         if len(values) != len(points):
