@@ -2,9 +2,8 @@
 
 Reference note for
 [`src/pycolmap_ba/backend/constraints.py`](../src/pycolmap_ba/backend/constraints.py)
-and its application in
-[`enrich/enrich_aerial_sfm_gcp.ipynb`](../enrich/enrich_aerial_sfm_gcp.ipynb)
-(ENRICH-Aerial, nadir-2 subblock).
+and
+its application to ENRICH-Aerial (nadir-2 subblock).
 
 ---
 

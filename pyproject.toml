@@ -53,13 +53,9 @@ convention = "google"
 
 [tool.ruff.lint.isort]
 known-first-party = ["pycolmap_ba"]
-known-local-folder = ["enrich_data"]
 
 [tool.ruff.lint.per-file-ignores]
 # The vendored upstream examples are reference material, kept verbatim.
 "pycolmap_examples/*" = ["D", "E", "B", "UP"]
-# Application layer: scripts document themselves in their module docstring, and
-# the second half of enrich_data.py is the dataset's own loader code, verbatim.
+# Application layer: scripts document themselves in their module docstring.
 "examples/*" = ["D103"]
-"enrich/*" = ["D103"]
-"enrich/enrich_data.py" = ["D205", "E501"]

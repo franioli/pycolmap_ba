@@ -2,8 +2,8 @@
 
 Reference note for
 [`src/pycolmap_ba/backend/reference_cloud.py`](../src/pycolmap_ba/backend/reference_cloud.py)
-and its validation in
-[`enrich/run_cloud_ba.py`](../enrich/run_cloud_ba.py) (ENRICH-Aerial, nadir-2).
+and
+its validation on ENRICH-Aerial (nadir-2).
 
 Companion to [`gcp_bundle_adjustment.md`](gcp_bundle_adjustment.md), whose
 weighting convention (§3–4) applies here unchanged.

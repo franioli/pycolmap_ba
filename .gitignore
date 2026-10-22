@@ -1,5 +1,6 @@
 data/
 sandbox/
+enrich/
 
 # COLMAP's glog output, written next to whatever ran the pipeline
 INFO.log*
