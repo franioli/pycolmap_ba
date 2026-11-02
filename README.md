@@ -14,7 +14,7 @@ uv sync --extra examples   # + what the enrich/ examples and notebooks need
 
 pycolmap comes from a local ONNX-enabled wheel (PyPI wheels crash on ALIKED/LightGlue), which pins Python to 3.12. See [docs/building_pycolmap_onnx.md](docs/building_pycolmap_onnx.md).
 
-Or skip the local build and use Docker, with CUDA and an optional COLMAP GUI: see [docs/docker.md](docs/docker.md).
+Or skip the local build and use Docker, with CUDA and the COLMAP GUI: see [docs/docker.md](docs/docker.md).
 
 ## Tests and example
 

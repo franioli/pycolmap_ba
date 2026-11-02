@@ -1,7 +1,7 @@
 # pycolmap_ba with ONNX Runtime (ALIKED, LightGlue, LoMa). This base file runs
-# on any machine, on the CPU. Which extra files are loaded (GPU, GUI) is chosen
-# once per machine with COMPOSE_FILE in .env, see .env.example and
-# docs/docker.md.
+# on any machine, on the CPU, and can open the COLMAP GUI wherever there is a
+# display. Which extra file is loaded (GPU) is chosen once per machine with
+# COMPOSE_FILE in .env, see .env.example and docs/docker.md.
 #
 #   docker compose build
 #   docker compose run --rm ba                      # shell
@@ -25,8 +25,15 @@ services:
     working_dir: /workspace
     stdin_open: true
     tty: true
+    environment:
+      # For `colmap gui`. WSLg serves :0 even when DISPLAY is unset (SSH session).
+      # On native Linux allow the container user once: xhost +SI:localuser:$(id -un)
+      DISPLAY: ${DISPLAY:-:0}
+      # Docker's IPC isolation breaks X11 shared memory.
+      QT_X11_NO_MITSHM: "1"
     volumes:
       - .:/workspace
+      - /tmp/.X11-unix:/tmp/.X11-unix
       - type: bind
         source: ${DATA_DIR:-./data}
         target: /data

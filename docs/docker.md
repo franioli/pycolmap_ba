@@ -1,4 +1,4 @@
-# Docker image (CUDA, ONNX Runtime, optional GUI)
+# Docker image (CUDA, ONNX Runtime, COLMAP GUI)
 
 A ready-to-run environment for pycolmap_ba with every COLMAP feature extractor
 and matcher: SIFT, ALIKED, LightGlue and LoMa, on CPU or an NVIDIA GPU.
@@ -26,101 +26,181 @@ PyPI has no usable alternative: `pycolmap` lacks both CUDA and ONNX, and
 | File | Purpose |
 |---|---|
 | [docker/Dockerfile](../docker/Dockerfile) | builder (pycolmap wheel) and runtime stages |
-| [docker-compose.yml](../docker-compose.yml) | the `ba` service; runs anywhere, on the CPU |
+| [docker-compose.yml](../docker-compose.yml) | the `ba` service; runs anywhere, on the CPU, GUI-capable |
 | [docker-compose.gpu.yml](../docker-compose.gpu.yml) | opt-in: NVIDIA GPU |
-| [docker-compose.gui.yml](../docker-compose.gui.yml) | opt-in: COLMAP GUI over X11 |
-| [docker-compose.wslg.yml](../docker-compose.wslg.yml) | opt-in: GPU-accelerated OpenGL on WSL2 |
+| [docker-compose.wsl.yml](../docker-compose.wsl.yml) | opt-in: Windows/WSL2 with NVIDIA GPU and accelerated GUI drawing |
 | [.env.example](../.env.example) | every setting, documented |
 | [docker/smoke_test.py](../docker/smoke_test.py) | checks every extractor/matcher pair and a bundle |
+
+## Installation
+
+You need an x86-64 machine with Docker and the Compose plugin (`docker compose
+version` should work). Apple Silicon and other ARM machines are not supported: the
+base image is amd64 only. Pick your case below, install its prerequisites, then
+follow "Quick start". The `COMPOSE_FILE` line each case sets in `.env` is explained
+in "Choosing a setup".
+
+### Linux, CPU only (laptop or server)
+
+- Install [Docker Engine and the Compose plugin](https://docs.docker.com/engine/install/),
+  and add your user to the `docker` group to run it without `sudo`.
+- Nothing to set for `COMPOSE_FILE`. Set `WITH_CUDNN=0` in `.env` to leave out cuDNN
+  (about 1 GB), which is only used on a GPU.
+- The GUI needs a desktop session. On a headless server just don't run it.
+
+### Linux with an NVIDIA GPU
+
+- Install the NVIDIA driver on the host (575 or newer is safe for the image's CUDA
+  12.9; older 12.x drivers usually work too), Docker Engine, and the
+  [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html).
+  Then register the toolkit with Docker and restart it:
+
+  ```bash
+  sudo nvidia-ctk runtime configure --runtime=docker
+  sudo systemctl restart docker
+  ```
+
+- In `.env`: `COMPOSE_FILE=docker-compose.yml:docker-compose.gpu.yml`.
+- Only the host driver is needed; CUDA and cuDNN come with the image.
+
+### Windows with an NVIDIA GPU (WSL2)
+
+- Install the normal **Windows** NVIDIA driver. Do not install a Linux driver
+  inside WSL: it uses the Windows one.
+- Install WSL2 with a Linux distribution (e.g. Ubuntu), and
+  [Docker Desktop](https://docs.docker.com/desktop/features/wsl/) with its WSL
+  integration enabled for that distribution.
+- Do everything below **inside the WSL distribution**: clone the repo into its home
+  directory (not under `/mnt/c`, which is much slower) and run `docker compose`
+  there. Images live on Docker Desktop's own disk, on C: by default.
+- In `.env`: `COMPOSE_FILE=docker-compose.yml:docker-compose.wsl.yml`.
+- GUI windows appear on the Windows desktop through WSLg, which comes with current
+  WSL; no extra X server is needed. Reaching the machine over SSH works too.
 
 ## Quick start
 
 ```bash
-cp .env.example .env          # set UID/GID (id -u, id -g) and DATA_DIR
+git clone https://github.com/franioli/pycolmap_ba.git && cd pycolmap_ba
+cp .env.example .env          # set UID/GID (id -u, id -g), DATA_DIR and your COMPOSE_FILE line
 mkdir -p data                 # or point DATA_DIR at an existing folder
-docker compose build
-docker compose run --rm ba python docker/smoke_test.py
+docker compose build          # first time ~10 min
+docker compose run --rm ba python docker/smoke_test.py --device cpu   # CPU setup
+docker compose run --rm ba python docker/smoke_test.py                # GPU setup: CPU and GPU
 docker compose run --rm ba    # interactive shell
 ```
 
-There is one service, `ba`, and the commands are the same on every machine.
-What differs is which compose files are loaded, set once in `.env` (see
-"Choosing a setup"). With nothing set it runs on the CPU. On a machine without
-an NVIDIA GPU you can also set `WITH_CUDNN=0` to leave out cuDNN (about 1 GB).
+The smoke test checks every extractor and matcher pair plus a bundle. The image is
+always built with CUDA, so without `--device cpu` it also tries the GPU and fails
+on a machine that has none. A failing GPU line on a GPU setup usually means the
+toolkit or driver is not set up (see the case above).
+
+There is one service, `ba`, and the commands are the same on every machine. What
+differs is which compose files are loaded, chosen once per machine in `.env`.
 
 ## Choosing a setup
 
-`docker-compose.yml` is the base. The other files each add one thing and are
-merged on top of it, later files winning. `COMPOSE_FILE` in `.env` lists the
-files to load, separated by colons, and applies to every `docker compose`
-command. Uncomment **one** line of `.env.example`:
+`docker-compose.yml` is the base and runs anywhere, on the CPU. The other files
+each add one thing and are merged on top of it, later files winning. Set
+`COMPOSE_FILE` in `.env` to the files you want, separated by colons; it applies to
+every `docker compose` command. Uncomment **one** line of `.env.example`:
 
 | Machine | `COMPOSE_FILE` |
 |---|---|
 | CPU only (default, nothing to set) | `docker-compose.yml` |
 | NVIDIA GPU | `docker-compose.yml:docker-compose.gpu.yml` |
-| GPU + GUI, native Linux | `...:docker-compose.gpu.yml:docker-compose.gui.yml` |
-| GPU + GUI, WSL2 | `...:docker-compose.gpu.yml:docker-compose.gui.yml:docker-compose.wslg.yml` |
-| GUI without a GPU | `docker-compose.yml:docker-compose.gui.yml` |
+| Windows (WSL2) with an NVIDIA GPU | `docker-compose.yml:docker-compose.wsl.yml` |
 
-`docker compose config` prints the merged result. Without a `gpu` file the
-container runs on the CPU even on a GPU machine. To try a combination once, pass
-the files explicitly, which overrides `.env`:
-`docker compose -f docker-compose.yml -f docker-compose.gpu.yml run --rm ba`.
+Without the `gpu` file the container runs on the CPU, even on a GPU machine.
+`docker compose config` prints the merged result, so use it to check what is loaded.
 
-Inside the container, run Python directly (`python script.py`), not `uv run`
-or `uv sync`: `pyproject.toml` points pycolmap at a local wheel path that only
-exists on the development laptop.
+## Working with Docker Compose
 
-The unit tests are not copied into the image; they run from the repo mount
-(pytest is installed):
+**Running.** `run` starts a fresh container, and `--rm` deletes it when it ends:
 
 ```bash
-docker compose run --rm ba python -m pytest
+docker compose run --rm ba                        # interactive shell
+docker compose run --rm ba python my_script.py    # one command, then exit
+docker compose run --rm ba python -m pytest       # unit tests (-v, -x, -k name)
+docker compose run --rm ba colmap gui             # COLMAP GUI, see below
 ```
 
-## Mounts
+Your repo and data are bind-mounts, so files written under `/workspace` and
+`/data` stay on the host. Anything else done inside a container (e.g. `pip install`)
+is lost when it exits: add the package to `pyproject.toml` and rebuild instead.
+Run Python directly (`python`), not `uv run` or `uv sync`, since `pyproject.toml`
+points pycolmap at a wheel path that exists only on the development laptop.
 
-| Container path | Source | Notes |
-|---|---|---|
-| `/workspace` | the repo | edits to `src/` apply without rebuilding |
-| `/data` | `DATA_DIR` | must exist; keep it on the Linux/WSL filesystem, not `/mnt/c` |
-| `~/.cache/colmap` | `COLMAP_CACHE` | model weights, downloaded on first use (~2 GB for all) |
-| `~/.nv` | volume | CUDA JIT cache, see "First GPU run" below |
+**When to rebuild.**
 
-`COLMAP_CACHE` can be a volume name (default) or a host path such as
-`/home/francesco/.cache/colmap`, to reuse weights a local install downloaded. A
-host path must exist before the first run; otherwise Docker creates it owned by
-root.
+| You changed | Do |
+|---|---|
+| `src/`, `tests/`, scripts, notebooks | nothing: the repo is mounted |
+| `DATA_DIR`, `COLMAP_CACHE`, `COMPOSE_FILE` | nothing: the next run uses them |
+| `pyproject.toml`, `uv.lock`, the Dockerfile, or a build option below | `docker compose build` |
+| a new COLMAP release | `docker compose build --pull`, see "Updating COLMAP" |
 
-## Optional dependencies
-
-`EXTRAS` in `.env` picks the dependency groups from `pyproject.toml`, then
-`docker compose build`:
-
-- `cloud` (default): open3d, for reference-cloud constraints, pre-alignment and
-  point-cloud export.
-- `examples`: open3d, opencv, imageio, matplotlib, ipykernel, for the `enrich/`
-  scripts and notebooks. `enrich/` itself is not copied into the image; it is
-  reached through the `/workspace` mount.
-- empty: the core only (pycolmap, pyceres, numpy, pandas, enlighten).
-
-## GUI
-
-The GUI libraries (Qt, Mesa) are part of the base image, so enabling the GUI
-needs no rebuild: it is a choice of mounts and environment variables. Pick a
-setup with the GUI in "Choosing a setup", then:
+**Trying another setup once.** Override the files for a single command with
+`-f`, which wins over `COMPOSE_FILE`:
 
 ```bash
-docker compose run --rm ba colmap gui
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml run --rm ba
 ```
 
-- **WSL2 (WSLg)**: add `docker-compose.wslg.yml` for GPU-accelerated OpenGL
-  through Mesa's d3d12 driver, or leave it out for software OpenGL.
-  Windows appear on the Windows desktop of that machine, also when compose is
-  started from an SSH session (`DISPLAY` defaults to WSLg's `:0`).
-- **Native Linux**: allow the container user first:
-  `xhost +SI:localuser:$(id -un)`.
+**Overriding `.env` for one command.** A variable set in the shell beats `.env`,
+which beats the defaults in the files:
+
+```bash
+DATA_DIR=/mnt/data/block1 docker compose run --rm ba python my_script.py
+EXTRAS=examples docker compose build
+docker compose build --build-arg EXTRAS=examples      # same, for build options
+docker compose --env-file .env.gpu run --rm ba        # a whole alternative file
+```
+
+`docker compose run -e NAME=value` only sets a variable *inside* the container; it
+does not change the `${...}` values Compose substitutes into the files. Keep
+`UID` and `GID` in `.env`: shells do not export them reliably.
+
+**GUI.** `colmap gui` works with any setup wherever there is a display; the
+GUI libraries are in the base image and the X11 socket is mounted by the base
+file, so there is nothing to enable. On a headless Linux server just don't run it.
+
+- **Windows (WSL2)**: windows appear on the Windows desktop of that machine, also
+  when compose is started from an SSH session (`DISPLAY` defaults to WSLg's `:0`).
+  `docker-compose.wsl.yml` makes the drawing use the GPU (Mesa's d3d12 driver). If
+  the window fails to open or draws badly, use `docker-compose.gpu.yml` instead:
+  the same GUI with software drawing.
+- **Native Linux**: allow the container user once: `xhost +SI:localuser:$(id -un)`.
+- **Over SSH with X forwarding**, `DISPLAY` points at the forwarded display, which
+  the container cannot reach. Run with `DISPLAY=:0` or on the machine itself.
+
+## Settings
+
+All are set in `.env` (see `.env.example`) or overridden as shown above.
+
+| Variable | Used at | Default | Meaning |
+|---|---|---|---|
+| `UID`, `GID` | build | 1000 | host user, so files in the mounts belong to you |
+| `DATA_DIR` | run | `./data` | datasets, mounted at `/data`; must exist; keep it on the Linux/WSL filesystem, not `/mnt/c` |
+| `COLMAP_CACHE` | run | `colmap-models` | model weights (~2 GB for all), see below |
+| `COMPOSE_FILE` | every command | base file | which compose files to load |
+| `EXTRAS` | build | `cloud` | Python extras to install, see below |
+| `COLMAP_IMAGE` | build | 4.2.1 by digest | base image |
+| `WITH_CUDNN` | build | `1` | `0` leaves out cuDNN (~1 GB) on machines without a GPU |
+| `BUILD_JOBS` | build | `4` | parallel compile jobs; lower it if the build is killed |
+
+`EXTRAS` picks groups from `pyproject.toml`. `cloud` (open3d) is needed for
+reference-cloud constraints, pre-alignment and point-cloud export. `examples` adds
+what the `enrich/` notebooks need (`enrich/` itself is reached through the repo
+mount, not copied). An empty `EXTRAS=` installs the core only: pycolmap, pyceres,
+numpy, pandas, enlighten.
+
+`COLMAP_CACHE` is a volume name by default. Set it to a host path such as
+`/home/francesco/.cache/colmap` to reuse weights a local install downloaded; that
+path must exist before the first run, or Docker creates it owned by root.
+
+Mounts inside the container: the repo at `/workspace` (edits apply without a
+rebuild), `DATA_DIR` at `/data`, the weights at `~/.cache/colmap`, and a volume at
+`~/.nv` that keeps the CUDA JIT cache (see "First GPU run").
 
 ## Updating COLMAP
 

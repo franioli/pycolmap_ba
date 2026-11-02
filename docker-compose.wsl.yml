@@ -1,9 +1,12 @@
-# GPU-accelerated OpenGL for the GUI on WSL2 (Mesa's d3d12 driver), on top of
-# docker-compose.gui.yml. Follows Microsoft's WSLg container recipe:
+# WSL2 workstation: the NVIDIA GPU, plus GPU-accelerated OpenGL for the COLMAP
+# GUI (Mesa's d3d12 driver, via WSLg). Use it instead of docker-compose.gpu.yml,
+# see .env.example. The X11 socket and DISPLAY come from the base file. Follows
+# Microsoft's WSLg container recipe:
 # https://github.com/microsoft/wslg/blob/main/samples/container/Containers.md
 
 services:
   ba:
+    gpus: all
     environment:
       GALLIUM_DRIVER: d3d12
       MESA_D3D12_DEFAULT_ADAPTER_NAME: NVIDIA
