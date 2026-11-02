@@ -114,8 +114,6 @@ this project to a newer Python, build the wheel with that interpreter:
 2. Copy the new `cp314` wheel to `~/software/wheels/`.
 3. Point `[tool.uv.sources]` at it and raise `requires-python` (e.g.
    `>=3.14,<3.15`). A single local wheel only covers one Python version.
-4. `scop` (editable, `~/dev/scop`) is also capped at `<3.13`; raise it there too
-   if you use the `scop` extra.
 
 This has not been tried yet. The SIFT-only fallback (PyPI wheel, no ALIKED or
 LightGlue) works on 3.14 but is not what this project's examples use.

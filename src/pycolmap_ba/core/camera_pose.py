@@ -118,7 +118,7 @@ def add_camera_pose_constraints(
             prior_pose = prior_poses.get(image.name)
             if prior_pose is None:
                 continue
-            if not image.is_ref_in_frame:
+            if not image.is_ref_in_frame():
                 raise NotImplementedError(
                     "6-DoF pose priors assume one camera per frame; image "
                     f"{image.name!r} is not the frame reference sensor"

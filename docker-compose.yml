@@ -1,0 +1,48 @@
+# pycolmap_ba with CUDA and ONNX Runtime (ALIKED, LightGlue, LoMa).
+# Settings come from .env (copy .env.example). See docs/docker.md.
+#
+#   docker compose build
+#   docker compose run --rm ba                          # shell, NVIDIA GPU
+#   docker compose --profile cpu run --rm ba-cpu        # shell, no GPU
+#   docker compose run --rm ba python docker/smoke_test.py
+
+x-ba: &ba
+  image: pycolmap_ba
+  build:
+    context: .
+    dockerfile: docker/Dockerfile
+    # Without a value, an arg is only passed when set in .env or the shell;
+    # otherwise the default in docker/Dockerfile applies.
+    args:
+      - COLMAP_IMAGE
+      - EXTRAS
+      - WITH_CUDNN
+      - BUILD_JOBS
+      - UID
+      - GID
+  working_dir: /workspace
+  stdin_open: true
+  tty: true
+  volumes:
+    - .:/workspace
+    - type: bind
+      source: ${DATA_DIR:-./data}
+      target: /data
+      bind:
+        create_host_path: false
+    # A name is a Docker volume, a path a bind mount of that host folder.
+    - ${COLMAP_CACHE:-colmap-models}:/home/app/.cache/colmap
+    - cuda-cache:/home/app/.nv
+
+services:
+  ba:
+    <<: *ba
+    gpus: all
+
+  ba-cpu:
+    <<: *ba
+    profiles: [cpu]
+
+volumes:
+  colmap-models:
+  cuda-cache:

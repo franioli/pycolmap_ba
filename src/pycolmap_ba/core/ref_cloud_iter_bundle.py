@@ -239,7 +239,7 @@ def run_cloud_constrained_bundle_adjustment(
         if verbose:
             print(
                 f"  pass {index}: {len(current):,} constrained at "
-                f"{options.max_dist:.1f} m gate, "
+                f"{options.max_dist:g} m gate, "
                 f"{fraction:.1%} correspondences changed, {elapsed:.1f} s"
             )
 

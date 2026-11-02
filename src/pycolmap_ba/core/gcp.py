@@ -122,7 +122,7 @@ def add_marker_constraints(
         image = by_name.get(obs.image_name)
         if image is None or obs.marker_name not in marker_xyz:
             continue  # marker not visible in this reconstruction
-        if not image.is_ref_in_frame:
+        if not image.is_ref_in_frame():
             raise NotImplementedError(
                 "marker image residuals assume one camera per frame; image "
                 f"{image.name!r} is not the frame reference sensor"

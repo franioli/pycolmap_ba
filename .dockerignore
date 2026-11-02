@@ -1,0 +1,9 @@
+# Allow-list: the image only needs the package and its lock. Everything else
+# (enrich/ datasets, sandbox/, .venv, .git) stays out of the build context and
+# is reached at runtime through the repo bind mount instead.
+*
+!pyproject.toml
+!uv.lock
+!src/
+!docker/smoke_test.py
+**/__pycache__

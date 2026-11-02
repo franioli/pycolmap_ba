@@ -1,0 +1,14 @@
+# GPU-accelerated OpenGL for the GUI on WSL2 (Mesa's d3d12 driver), on top of
+# docker-compose.gui.yml. Follows Microsoft's WSLg container recipe:
+# https://github.com/microsoft/wslg/blob/main/samples/container/Containers.md
+
+services:
+  ba:
+    environment:
+      GALLIUM_DRIVER: d3d12
+      MESA_D3D12_DEFAULT_ADAPTER_NAME: NVIDIA
+      LD_LIBRARY_PATH: /usr/lib/wsl/lib:/usr/local/cuda/lib64
+    devices:
+      - /dev/dxg
+    volumes:
+      - /usr/lib/wsl:/usr/lib/wsl:ro

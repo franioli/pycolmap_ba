@@ -7,24 +7,33 @@ requires-python = ">=3.12,<3.13"
 
 dependencies = [
     "enlighten>=1.12",
-    "imageio>=2.37.4",
-    "ipykernel>=7.3.0",
-    "matplotlib>=3.11.1",
     "numpy>=2.0",
-    "open3d>=0.19.0",
-    "opencv-python>=5.0.0.93",
     "pandas>=3.0.5",
     "pyceres>=2.6",
     "pycolmap>=4.2.0.dev0",
 ]
 
 [project.optional-dependencies]
-metashape = ["metashape"]
-scop = ["scop>=2606.0"]
-all = ["metashape", "scop>=2606.0"]
+# Reference-cloud constraints, pre-alignment and point-cloud export.
+cloud = ["open3d>=0.19.0"]
+# Everything the enrich/ examples and notebooks need on top of the core.
+examples = [
+    "imageio>=2.37.4",
+    "ipykernel>=7.3.0",
+    "matplotlib>=3.11.1",
+    "open3d>=0.19.0",
+    "opencv-python-headless>=5.0.0.93",
+]
 
 [dependency-groups]
-dev = ["ruff>=0.9"]
+# Installed in the Docker image too, so the tests run there.
+test = ["pytest>=9.0"]
+dev = ["ruff>=0.9", { include-group = "test" }]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# open3d pulls in dash, whose pytest plugin is irrelevant here and warns.
+addopts = "-p no:dash"
 
 [build-system]
 requires = ["hatchling"]
@@ -34,11 +43,9 @@ build-backend = "hatchling.build"
 packages = ["src/pycolmap_ba"]
 
 [tool.uv.sources]
+# Local ONNX-enabled build (docs/building_pycolmap_onnx.md). The Docker image
+# builds its own wheel and does not use this path.
 pycolmap = { path = "/home/francesco/software/wheels/pycolmap-4.2.0.dev0-cp312-cp312-linux_x86_64.whl" }
-scop = { path = "/home/francesco/dev/scop", editable = true }
-metashape = [
-    { url = "https://download.agisoft.com/metashape-2.3.1-cp39.cp310.cp311.cp312.cp313-abi3-linux_x86_64.whl", marker = "sys_platform == 'linux'" },
-]
 
 [tool.ruff]
 line-length = 88

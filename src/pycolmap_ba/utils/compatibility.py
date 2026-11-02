@@ -326,7 +326,9 @@ def check_cloud_compatibility(
     trimmed = dist[dist <= np.percentile(dist, opts.percentile)]
     surface = np.abs(
         np.einsum(
-            "mi,mi->m", inside[within] - cloud.mu[idx[within]], cloud.normals[idx[within]]
+            "mi,mi->m",
+            inside[within] - cloud.mu[idx[within]],
+            cloud.normals[idx[within]],
         )
     )
 

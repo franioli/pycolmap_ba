@@ -205,9 +205,7 @@ def extract_and_match(
 
     extractor = options.extractor or pycolmap.FeatureExtractorType.SIFT
     extraction_options = pycolmap.FeatureExtractionOptions(
-        type=extractor,
-        max_image_size=options.max_image_size,
-        use_gpu=options.use_gpu,
+        type=extractor, max_image_size=options.max_image_size
     )
     # The feature cap lives on the extractor's own sub-options (`.sift`,
     # `.aliked`, ...), named after the first word of the enum member.
@@ -215,18 +213,23 @@ def extract_and_match(
     getattr(extraction_options, family).max_num_features = options.max_num_features
 
     matching_options = pycolmap.FeatureMatchingOptions(
-        type=options.matcher or pycolmap.FeatureMatcherType.SIFT_BRUTEFORCE,
-        use_gpu=options.use_gpu,
+        type=options.matcher or pycolmap.FeatureMatcherType.SIFT_BRUTEFORCE
     )
 
+    # pycolmap overwrites `use_gpu` in both option sets from `device`, whose
+    # default (auto) means "GPU" in any CUDA build, with or without a GPU.
+    device = pycolmap.Device.cuda if options.use_gpu else pycolmap.Device.cpu
     pycolmap.extract_features(
         database_path,
         image_path,
         camera_mode=options.camera_mode or pycolmap.CameraMode.SINGLE,
         reader_options=pycolmap.ImageReaderOptions(camera_model=options.camera_model),
         extraction_options=extraction_options,
+        device=device,
     )
-    pycolmap.match_exhaustive(database_path, matching_options=matching_options)
+    pycolmap.match_exhaustive(
+        database_path, matching_options=matching_options, device=device
+    )
 
 
 def seed_intrinsics(
