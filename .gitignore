@@ -1,6 +1,7 @@
 data/
 sandbox/
 enrich/
+:memory:.ses
 
 # COLMAP's glog output, written next to whatever ran the pipeline
 INFO.log*
