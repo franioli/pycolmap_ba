@@ -341,7 +341,7 @@ def _mapping_with_progress(
     """Run `incremental_mapping` behind a registration progress bar.
 
     Falls back to a plain run when `enlighten` is not installed. Adapted from
-    `pycolmap_examples/example.py`.
+    COLMAP's `python/examples/example.py`.
     """
     try:
         import enlighten

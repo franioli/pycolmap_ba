@@ -26,7 +26,8 @@ PyPI has no usable alternative: `pycolmap` lacks both CUDA and ONNX, and
 | File | Purpose |
 |---|---|
 | [docker/Dockerfile](../docker/Dockerfile) | builder (pycolmap wheel) and runtime stages |
-| [docker-compose.yml](../docker-compose.yml) | `ba` (NVIDIA GPU) and `ba-cpu` services |
+| [docker-compose.yml](../docker-compose.yml) | the `ba` service; runs anywhere, on the CPU |
+| [docker-compose.gpu.yml](../docker-compose.gpu.yml) | opt-in: NVIDIA GPU |
 | [docker-compose.gui.yml](../docker-compose.gui.yml) | opt-in: COLMAP GUI over X11 |
 | [docker-compose.wslg.yml](../docker-compose.wslg.yml) | opt-in: GPU-accelerated OpenGL on WSL2 |
 | [.env.example](../.env.example) | every setting, documented |
@@ -42,12 +43,30 @@ docker compose run --rm ba python docker/smoke_test.py
 docker compose run --rm ba    # interactive shell
 ```
 
-On a machine without an NVIDIA GPU, use the `ba-cpu` service and set
-`WITH_CUDNN=0` in `.env`:
+There is one service, `ba`, and the commands are the same on every machine.
+What differs is which compose files are loaded, set once in `.env` (see
+"Choosing a setup"). With nothing set it runs on the CPU. On a machine without
+an NVIDIA GPU you can also set `WITH_CUDNN=0` to leave out cuDNN (about 1 GB).
 
-```bash
-docker compose --profile cpu run --rm ba-cpu python docker/smoke_test.py
-```
+## Choosing a setup
+
+`docker-compose.yml` is the base. The other files each add one thing and are
+merged on top of it, later files winning. `COMPOSE_FILE` in `.env` lists the
+files to load, separated by colons, and applies to every `docker compose`
+command. Uncomment **one** line of `.env.example`:
+
+| Machine | `COMPOSE_FILE` |
+|---|---|
+| CPU only (default, nothing to set) | `docker-compose.yml` |
+| NVIDIA GPU | `docker-compose.yml:docker-compose.gpu.yml` |
+| GPU + GUI, native Linux | `...:docker-compose.gpu.yml:docker-compose.gui.yml` |
+| GPU + GUI, WSL2 | `...:docker-compose.gpu.yml:docker-compose.gui.yml:docker-compose.wslg.yml` |
+| GUI without a GPU | `docker-compose.yml:docker-compose.gui.yml` |
+
+`docker compose config` prints the merged result. Without a `gpu` file the
+container runs on the CPU even on a GPU machine. To try a combination once, pass
+the files explicitly, which overrides `.env`:
+`docker compose -f docker-compose.yml -f docker-compose.gpu.yml run --rm ba`.
 
 Inside the container, run Python directly (`python script.py`), not `uv run`
 or `uv sync`: `pyproject.toml` points pycolmap at a local wheel path that only
@@ -89,18 +108,18 @@ root.
 ## GUI
 
 The GUI libraries (Qt, Mesa) are part of the base image, so enabling the GUI
-needs no rebuild: it is a choice of mounts and environment variables. Uncomment
-one `COMPOSE_FILE` line in `.env`, then:
+needs no rebuild: it is a choice of mounts and environment variables. Pick a
+setup with the GUI in "Choosing a setup", then:
 
 ```bash
 docker compose run --rm ba colmap gui
 ```
 
-- **WSL2 (WSLg)**: use the line with `docker-compose.wslg.yml` for GPU-accelerated
-  OpenGL through Mesa's d3d12 driver, or the shorter line for software OpenGL.
+- **WSL2 (WSLg)**: add `docker-compose.wslg.yml` for GPU-accelerated OpenGL
+  through Mesa's d3d12 driver, or leave it out for software OpenGL.
   Windows appear on the Windows desktop of that machine, also when compose is
   started from an SSH session (`DISPLAY` defaults to WSLg's `:0`).
-- **Native Linux**: use the X11 line and allow the container user first:
+- **Native Linux**: allow the container user first:
   `xhost +SI:localuser:$(id -un)`.
 
 ## Updating COLMAP

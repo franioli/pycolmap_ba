@@ -52,7 +52,7 @@ Examples:
 
 For full control over Ceres itself, build the adjuster as done here and then
 call `options.ceres.create_solver_options(config, adjuster.problem)` followed by
-`pyceres.solve(...)`, as in `pycolmap_examples/custom_bundle_adjustment.py`.
+`pyceres.solve(...)`, as in COLMAP's `python/examples/custom_bundle_adjustment.py`.
 """
 
 from __future__ import annotations

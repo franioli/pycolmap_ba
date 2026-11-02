@@ -254,7 +254,7 @@ the ground) that leaks into the check points. Worth resolving at source.
 - Schönberger & Frahm, *Structure-from-Motion Revisited*, CVPR 2016 (COLMAP).
 - Ceres Solver documentation — `NormalPrior`, `LossFunction`, `Manifold`,
   solver options: <http://ceres-solver.org/>
-- Local: `pycolmap_examples/` (upstream COLMAP python examples — gauge fixing,
+- COLMAP's `python/examples/` (gauge fixing,
   the mapper reimplemented in Python, synthetic datasets), and `ba_tutorial.py`
   in the belvedere project for a from-scratch BA walkthrough including a GCP
   stage.
